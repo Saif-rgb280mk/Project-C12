@@ -13,3 +13,11 @@ Prices move by random daily changes plus news events. At the end you get a repor
 Open `index.html` in any browser. No install needed.
 
 Keys: `B` buy, `S` sell, `Space` pause, `↑`/`↓` switch stock.
+
+---
+
+# Frameshift
+
+`frameshift/index.html`: describe any animation in words ("a dragon flying over mountains breathing fire"), pick a style, and Claude writes the animation code and plays it on the page. You can then ask for changes ("make it night time"), view or copy the code, and save it as its own HTML file.
+
+Generating new animations uses Claude, so it works when the page is opened as an artifact on claude.ai. Opened as a plain file, the four built-in example animations still play.

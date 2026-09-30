@@ -1,0 +1,499 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"></head>
+<body>
+<title>Frameshift</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@600;800&family=Figtree:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a film studio desk. Script (your description) on the left, the screening stage on the right, the reel of past takes underneath. */
+:root {
+  --bg: #ECEEF1; --panel: #FFFFFF; --ink: #16181D; --muted: #5E6470; --line: #D7DBE1;
+  --accent: #E0542E; --accent-ink: #FFFFFF; --accent-soft: rgba(224, 84, 46, 0.1);
+  --stage: #07080C; --ok: #1E8A5A; --err: #C43A2F;
+  --f-display: "Unbounded", "Arial Black", system-ui, sans-serif;
+  --f-body: "Figtree", "Segoe UI", system-ui, sans-serif;
+  --f-mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0F1115; --panel: #181B21; --ink: #ECEEF2; --muted: #9AA1AE; --line: #2A2F38;
+  --accent: #FF7A52; --accent-ink: #16181D; --accent-soft: rgba(255, 122, 82, 0.14);
+  --stage: #000000; --ok: #45C28A; --err: #FF6F63; color-scheme: dark;
+} }
+:root[data-theme="dark"] {
+  --bg: #0F1115; --panel: #181B21; --ink: #ECEEF2; --muted: #9AA1AE; --line: #2A2F38;
+  --accent: #FF7A52; --accent-ink: #16181D; --accent-soft: rgba(255, 122, 82, 0.14);
+  --stage: #000000; --ok: #45C28A; --err: #FF6F63; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { background: var(--bg); color: var(--ink); font: 15px/1.5 var(--f-body); }
+.wrap { max-width: 1280px; margin: 0 auto; padding-inline: 16px; padding-block: 20px 48px; display: grid; gap: 18px; }
+
+header { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 8px 24px; }
+.logo { font: 800 clamp(26px, 4vw, 38px)/1 var(--f-display); letter-spacing: -.03em; margin: 0; }
+.logo span { color: var(--accent); }
+header p { margin: 0; color: var(--muted); max-width: 52ch; }
+
+.studio { display: grid; grid-template-columns: minmax(0, 380px) minmax(0, 1fr); gap: 18px; align-items: start; }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 18px; min-width: 0; display: grid; gap: 14px; }
+.label { font-size: 11px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; color: var(--muted); }
+h2 { font: 600 16px/1.2 var(--f-display); margin: 0; letter-spacing: -.01em; }
+
+textarea, input[type="text"] { width: 100%; font: 15px/1.5 var(--f-body); color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 12px; resize: vertical; }
+textarea { min-height: 130px; }
+textarea:focus-visible, input:focus-visible, button:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.field { display: grid; gap: 6px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { text-align: left; font: 500 13px var(--f-body); padding: 5px 10px; border-radius: 999px; border: 1px solid var(--line); background: transparent; color: var(--ink); cursor: pointer; }
+.chip:hover { border-color: var(--muted); }
+.chip[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+
+button { font: 600 14px var(--f-body); border-radius: 10px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); padding: 9px 14px; cursor: pointer; }
+button:hover { border-color: var(--muted); }
+button:disabled { opacity: .5; cursor: not-allowed; }
+.go { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font: 700 16px var(--f-body); padding: 13px 16px; width: 100%; }
+.go:hover { border-color: var(--accent); filter: brightness(1.05); }
+.status { font-size: 14px; color: var(--muted); min-height: 21px; }
+.status.err { color: var(--err); }
+.status.ok { color: var(--ok); }
+.refine { display: grid; gap: 8px; padding-top: 14px; border-top: 1px solid var(--line); }
+.row { display: flex; gap: 8px; }
+.row input { flex: 1; min-width: 0; }
+
+.stage-panel { gap: 12px; }
+.stage-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 16px; }
+.stage-head h2 { font-size: 20px; text-wrap: balance; }
+.stage-head p { margin: 2px 0 0; color: var(--muted); font-size: 14px; }
+.stage { position: relative; aspect-ratio: 16 / 9; max-width: 100%; background: var(--stage); border-radius: 10px; overflow: hidden; }
+.stage iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; display: block; }
+.making { position: absolute; inset: 0; display: grid; place-items: center; align-content: center; gap: 14px; background: rgba(7, 8, 12, .78); color: #F2F2F2; text-align: center; padding: 16px; }
+.making b { font: 600 18px var(--f-display); }
+.making small { color: #B9BCC4; max-width: 40ch; }
+.reel-anim { display: flex; gap: 6px; }
+.reel-anim i { width: 14px; height: 22px; border-radius: 3px; background: var(--accent); animation: flick 1s infinite ease-in-out; }
+.reel-anim i:nth-child(2) { animation-delay: .15s; } .reel-anim i:nth-child(3) { animation-delay: .3s; } .reel-anim i:nth-child(4) { animation-delay: .45s; }
+@keyframes flick { 0%, 100% { transform: scaleY(.5); opacity: .4; } 50% { transform: scaleY(1); opacity: 1; } }
+.toolbar { display: flex; flex-wrap: wrap; gap: 8px; }
+.toolbar button { padding: 7px 12px; font-size: 13px; }
+.errbox { border: 1px solid var(--err); color: var(--err); border-radius: 10px; padding: 10px 12px; font-size: 14px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.code { margin: 0; max-height: 360px; overflow: auto; background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 12px; font: 12.5px/1.55 var(--f-mono); white-space: pre; }
+
+.reel { display: grid; gap: 10px; }
+.reel-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; }
+.take { text-align: left; display: grid; gap: 2px; padding: 12px 14px; border-radius: 12px; background: var(--panel); border: 1px solid var(--line); }
+.take[aria-current="true"] { border-color: var(--accent); background: var(--accent-soft); }
+.take b { font-weight: 700; }
+.take span { font-size: 13px; color: var(--muted); font-weight: 400; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.take em { font-style: normal; font: 600 10px var(--f-body); letter-spacing: .09em; text-transform: uppercase; color: var(--accent); }
+
+@media (max-width: 860px) { .studio { grid-template-columns: minmax(0, 1fr); } .stage-panel { order: -1; } }
+@media (prefers-reduced-motion: reduce) { .reel-anim i { animation: none; opacity: 1; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1 class="logo">Frame<span>shift</span></h1>
+    <p>Describe any animation in your own words. Claude writes it, and it plays right here. Then tell it what to change.</p>
+  </header>
+
+  <div class="studio">
+    <section class="panel" aria-label="Describe your animation">
+      <div class="field">
+        <label class="label" for="prompt">Your animation</label>
+        <textarea id="prompt" placeholder="Example: a cat on a skateboard rolling through a city at sunset, with birds flying past and the camera following it"></textarea>
+      </div>
+      <div class="field">
+        <span class="label">Need an idea?</span>
+        <div class="chips" id="ideas"></div>
+      </div>
+      <div class="field">
+        <span class="label">Style</span>
+        <div class="chips" id="styles" role="group" aria-label="Style"></div>
+      </div>
+      <div class="field">
+        <span class="label">Extras</span>
+        <div class="chips" id="extras" role="group" aria-label="Extras"></div>
+      </div>
+      <button class="go" id="makeBtn">Make my animation</button>
+      <div class="status" id="status" role="status"></div>
+
+      <div class="refine" id="refine">
+        <label class="label" for="change">Change this animation</label>
+        <div class="row">
+          <input type="text" id="change" placeholder="Make it night time, add rain, make it faster…">
+          <button id="changeBtn">Change it</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel stage-panel" aria-label="Your animation">
+      <div class="stage-head">
+        <div>
+          <h2 id="animTitle">Fireworks over the city</h2>
+          <p id="animNote">Example. Click the sky to launch your own rockets.</p>
+        </div>
+      </div>
+      <div class="stage" id="stage">
+        <iframe id="frame" sandbox="allow-scripts" title="Animation"></iframe>
+        <div class="making" id="making" hidden>
+          <div class="reel-anim"><i></i><i></i><i></i><i></i></div>
+          <b id="makingText">Claude is drawing your animation…</b>
+          <small>This usually takes 20 to 60 seconds. Detailed scenes take longer.</small>
+          <button id="stopBtn">Stop</button>
+        </div>
+      </div>
+      <div class="errbox" id="errbox" hidden>
+        <span id="errText"></span>
+        <button id="fixBtn">Ask Claude to fix it</button>
+      </div>
+      <div class="toolbar">
+        <button id="replayBtn">Replay</button>
+        <button id="fullBtn">Full screen</button>
+        <button id="codeBtn" aria-expanded="false">Show code</button>
+        <button id="copyBtn">Copy code</button>
+        <button id="saveBtn" hidden>Save as HTML file</button>
+      </div>
+      <pre class="code" id="code" hidden></pre>
+    </section>
+  </div>
+
+  <section class="reel" aria-label="Animations">
+    <h2>Your reel</h2>
+    <div class="reel-list" id="reel"></div>
+  </section>
+</div>
+
+<script>
+(() => {
+  const $ = s => document.querySelector(s);
+
+  // ---------- Built-in examples (same format Claude writes) ----------
+  const EXAMPLES = [
+    { id: "ex-fireworks", title: "Fireworks over the city", note: "Example. Click the sky to launch your own rockets.", prompt: "Fireworks over a city skyline at night", code: `
+const parts = [], rockets = [], buildings = [];
+for (let x = 0; x < 4000; x += 38 + Math.random() * 40) {
+  const b = { x, w: 30 + Math.random() * 36, h: 60 + Math.random() * 170, win: [] };
+  for (let wy = 10; wy < b.h - 8; wy += 14) for (let wx = 6; wx < b.w - 8; wx += 10) if (Math.random() < 0.35) b.win.push([wx, wy]);
+  buildings.push(b);
+}
+function launch(x) {
+  rockets.push({ x: x ?? W * (0.15 + Math.random() * 0.7), y: H, vy: -(H * 0.013 + Math.random() * H * 0.005), hue: Math.random() * 360, target: H * (0.12 + Math.random() * 0.3) });
+}
+canvas.addEventListener("click", e => launch(e.offsetX));
+let last = 0;
+ctx.fillStyle = "#070a1f"; ctx.fillRect(0, 0, W, H);
+function frame(ts) {
+  ctx.fillStyle = "rgba(7,10,31,0.22)"; ctx.fillRect(0, 0, W, H);
+  if (ts - last > 650) { launch(); last = ts; }
+  for (let i = rockets.length - 1; i >= 0; i--) {
+    const r = rockets[i]; r.y += r.vy; r.vy *= 0.99;
+    ctx.fillStyle = "hsl(" + r.hue + ",100%,85%)"; ctx.fillRect(r.x - 1, r.y, 2, 7);
+    if (r.y <= r.target || r.vy > -1) {
+      const n = 70 + Math.random() * 50;
+      for (let k = 0; k < n; k++) { const a = Math.random() * Math.PI * 2, s = 1 + Math.random() * 4.5; parts.push({ x: r.x, y: r.y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, life: 1, hue: r.hue + Math.random() * 40 }); }
+      rockets.splice(i, 1);
+    }
+  }
+  ctx.globalCompositeOperation = "lighter";
+  for (let i = parts.length - 1; i >= 0; i--) {
+    const p = parts[i]; p.x += p.vx; p.y += p.vy; p.vy += 0.045; p.vx *= 0.985; p.vy *= 0.985; p.life -= 0.011;
+    if (p.life <= 0) { parts.splice(i, 1); continue; }
+    ctx.fillStyle = "hsla(" + p.hue + ",100%,62%," + p.life + ")";
+    ctx.beginPath(); ctx.arc(p.x, p.y, 2.2 * p.life + 0.6, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.globalCompositeOperation = "source-over";
+  for (const b of buildings) {
+    if (b.x > W) break;
+    ctx.fillStyle = "#03040c"; ctx.fillRect(b.x, H - b.h, b.w, b.h);
+    ctx.fillStyle = "rgba(255,210,120,0.8)";
+    for (const [wx, wy] of b.win) ctx.fillRect(b.x + wx, H - b.h + wy, 4, 6);
+  }
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);` },
+    { id: "ex-solar", title: "Our solar system", note: "Example. Move your mouse to tilt the view.", prompt: "The planets orbiting the sun", code: `
+const planets = [
+  { r: 3, d: 62, s: 4.15, c: "#b8ada0" }, { r: 6, d: 88, s: 1.62, c: "#e9c47c" },
+  { r: 6.5, d: 118, s: 1, c: "#4c8fe3", moon: true }, { r: 5, d: 148, s: 0.53, c: "#d9643c" },
+  { r: 16, d: 205, s: 0.084, c: "#d9b58b" }, { r: 13, d: 262, s: 0.034, c: "#eadaa8", ring: true },
+  { r: 9, d: 310, s: 0.012, c: "#8fd3e0" }, { r: 9, d: 350, s: 0.006, c: "#4f6fe0" }
+];
+const stars = Array.from({ length: 260 }, () => ({ x: Math.random(), y: Math.random(), p: Math.random() * 10 }));
+function frame(ms) {
+  const t = ms / 1000;
+  ctx.fillStyle = "#03040b"; ctx.fillRect(0, 0, W, H);
+  for (const s of stars) { ctx.fillStyle = "rgba(255,255,255," + (0.25 + 0.6 * Math.abs(Math.sin(t * 0.8 + s.p))) + ")"; ctx.fillRect(s.x * W, s.y * H, 1.4, 1.4); }
+  const cx = W / 2, cy = H / 2, k = Math.min(W / 760, H / 400), tilt = 0.25 + 0.5 * (mouse.y / (H || 1));
+  const pos = planets.map(p => { const a = t * p.s * 0.6 + p.d; return { p, a, x: cx + Math.cos(a) * p.d * k, y: cy + Math.sin(a) * p.d * k * tilt }; });
+  ctx.strokeStyle = "rgba(255,255,255,0.12)"; ctx.lineWidth = 1;
+  for (const p of planets) { ctx.beginPath(); ctx.ellipse(cx, cy, p.d * k, p.d * k * tilt, 0, 0, Math.PI * 2); ctx.stroke(); }
+  const draw = o => {
+    const r = o.p.r * k;
+    if (o.p.ring) { ctx.strokeStyle = "rgba(234,218,168,0.7)"; ctx.lineWidth = 2 * k; ctx.beginPath(); ctx.ellipse(o.x, o.y, r * 2.1, r * 0.7, -0.3, 0, Math.PI * 2); ctx.stroke(); }
+    const g = ctx.createRadialGradient(o.x - r * 0.4, o.y - r * 0.4, r * 0.1, o.x, o.y, r);
+    g.addColorStop(0, "#ffffff"); g.addColorStop(0.25, o.p.c); g.addColorStop(1, "#111");
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(o.x, o.y, r, 0, Math.PI * 2); ctx.fill();
+    if (o.p.moon) { const ma = t * 5; ctx.fillStyle = "#ccc"; ctx.beginPath(); ctx.arc(o.x + Math.cos(ma) * r * 2.2, o.y + Math.sin(ma) * r * 2.2 * tilt, 1.8 * k, 0, Math.PI * 2); ctx.fill(); }
+  };
+  pos.filter(o => o.y < cy).forEach(draw);
+  const sr = 30 * k, sg = ctx.createRadialGradient(cx, cy, 0, cx, cy, sr * 3);
+  sg.addColorStop(0, "#fff7d6"); sg.addColorStop(0.3, "#ffbf3c"); sg.addColorStop(0.34, "rgba(255,140,40,0.5)"); sg.addColorStop(1, "rgba(255,120,20,0)");
+  ctx.fillStyle = sg; ctx.beginPath(); ctx.arc(cx, cy, sr * 3, 0, Math.PI * 2); ctx.fill();
+  pos.filter(o => o.y >= cy).forEach(draw);
+  requestAnimationFrame(frame);
+}
+mouse.y = H * 0.5;
+requestAnimationFrame(frame);` },
+    { id: "ex-aquarium", title: "Aquarium", note: "Example. The fish swim toward your mouse.", prompt: "A calm aquarium with fish, bubbles and seaweed", code: `
+const fish = Array.from({ length: 14 }, (_, i) => ({ x: Math.random() * W, y: H * (0.15 + Math.random() * 0.65), v: 0.6 + Math.random() * 1.4, dir: Math.random() < 0.5 ? 1 : -1, s: 10 + Math.random() * 16, hue: [20, 45, 190, 330, 280][i % 5], ph: Math.random() * 6 }));
+const bubbles = [];
+const weeds = Array.from({ length: 11 }, (_, i) => ({ x: (i + 0.5) / 11, h: 0.25 + Math.random() * 0.3, ph: Math.random() * 6 }));
+function frame(ms) {
+  const t = ms / 1000;
+  const g = ctx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, "#1b6fa8"); g.addColorStop(1, "#062440");
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  ctx.save(); ctx.globalAlpha = 0.07; ctx.fillStyle = "#fff";
+  for (let i = 0; i < 5; i++) { const x = (i / 5) * W + Math.sin(t * 0.3 + i) * 40; ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x + 60, 0); ctx.lineTo(x + 200, H); ctx.lineTo(x + 90, H); ctx.fill(); }
+  ctx.restore();
+  ctx.fillStyle = "#c9b27c"; ctx.beginPath(); ctx.moveTo(0, H);
+  for (let x = 0; x <= W; x += 20) ctx.lineTo(x, H - 26 - Math.sin(x * 0.02) * 8);
+  ctx.lineTo(W, H); ctx.fill();
+  for (const w of weeds) {
+    const bx = w.x * W, by = H - 22, top = by - w.h * H, sway = Math.sin(t * 1.2 + w.ph) * 26;
+    ctx.strokeStyle = "#2f9e5b"; ctx.lineWidth = 7; ctx.lineCap = "round";
+    ctx.beginPath(); ctx.moveTo(bx, by); ctx.quadraticCurveTo(bx - sway, (by + top) / 2, bx + sway, top); ctx.stroke();
+  }
+  if (Math.random() < 0.12) bubbles.push({ x: Math.random() * W, y: H, r: 2 + Math.random() * 4 });
+  ctx.strokeStyle = "rgba(255,255,255,0.6)"; ctx.lineWidth = 1.2;
+  for (let i = bubbles.length - 1; i >= 0; i--) { const b = bubbles[i]; b.y -= 1 + b.r * 0.3; b.x += Math.sin(t * 3 + b.y * 0.05) * 0.4; if (b.y < -10) { bubbles.splice(i, 1); continue; } ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2); ctx.stroke(); }
+  for (const f of fish) {
+    if (mouse.inside) { const dx = mouse.x - f.x, dy = mouse.y - f.y; f.dir = dx > 0 ? 1 : -1; f.y += dy * 0.01; }
+    f.x += f.v * f.dir; f.y += Math.sin(t * 2 + f.ph) * 0.3;
+    if (f.x > W + 40) f.dir = -1; if (f.x < -40) f.dir = 1;
+    const wig = Math.sin(t * 10 + f.ph) * 0.35;
+    ctx.save(); ctx.translate(f.x, f.y); ctx.scale(f.dir, 1);
+    ctx.fillStyle = "hsl(" + f.hue + ",85%,55%)";
+    ctx.beginPath(); ctx.moveTo(-f.s * 0.8, 0); ctx.lineTo(-f.s * 1.6, -f.s * (0.55 + wig)); ctx.lineTo(-f.s * 1.6, f.s * (0.55 - wig)); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(0, 0, f.s, f.s * 0.55, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "rgba(255,255,255,0.35)"; ctx.beginPath(); ctx.ellipse(-f.s * 0.1, -f.s * 0.2, f.s * 0.5, f.s * 0.15, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(f.s * 0.5, -f.s * 0.12, f.s * 0.16, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#111"; ctx.beginPath(); ctx.arc(f.s * 0.55, -f.s * 0.12, f.s * 0.08, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  }
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);` },
+    { id: "ex-warp", title: "Warp speed", note: "Example. Hold the mouse button down to go to hyperspace.", prompt: "Flying through space at warp speed", code: `
+const stars = Array.from({ length: 700 }, () => ({ x: (Math.random() - 0.5) * 2, y: (Math.random() - 0.5) * 2, z: Math.random() }));
+let speed = 0.004;
+function frame() {
+  speed += ((mouse.down ? 0.04 : 0.004) - speed) * 0.05;
+  ctx.fillStyle = "rgba(0,0,8," + (mouse.down ? 0.25 : 0.6) + ")"; ctx.fillRect(0, 0, W, H);
+  const cx = W / 2 + (mouse.inside ? (mouse.x - W / 2) * 0.1 : 0), cy = H / 2 + (mouse.inside ? (mouse.y - H / 2) * 0.1 : 0), f = Math.max(W, H) * 0.5;
+  for (const s of stars) {
+    const pz = s.z; s.z -= speed;
+    if (s.z <= 0.01) { s.x = (Math.random() - 0.5) * 2; s.y = (Math.random() - 0.5) * 2; s.z = 1; continue; }
+    const x1 = cx + (s.x / pz) * f, y1 = cy + (s.y / pz) * f, x2 = cx + (s.x / s.z) * f, y2 = cy + (s.y / s.z) * f;
+    const b = 1 - s.z;
+    ctx.strokeStyle = "hsla(" + (200 + b * 60) + ",90%," + (60 + b * 40) + "%," + b + ")";
+    ctx.lineWidth = b * 3; ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+  }
+  requestAnimationFrame(frame);
+}
+ctx.fillStyle = "#000008"; ctx.fillRect(0, 0, W, H);
+requestAnimationFrame(frame);` }
+  ];
+
+  const IDEAS = [
+    "A dragon flying over mountains and breathing fire",
+    "A football match where the ball bounces into the goal",
+    "Snow falling on a cozy cabin with smoke from the chimney",
+    "A rocket launching from Earth to the Moon",
+    "Neon rain in a cyberpunk city",
+    "My name written in glowing letters that explode into sparks"
+  ];
+  const STYLES = ["Cartoon", "Neon glow", "Realistic", "Pixel art", "Minimal", "Dreamy"];
+  const EXTRAS = ["Interactive with mouse", "Text and title", "Slow and calm", "Fast and wild", "Night time"];
+  let style = "Cartoon";
+  const extras = new Set(["Interactive with mouse"]);
+
+  // ---------- State ----------
+  let takes = [];
+  try { takes = JSON.parse(localStorage.getItem("frameshift-takes") || "[]"); } catch { takes = []; }
+  const saveTakes = () => { try { localStorage.setItem("frameshift-takes", JSON.stringify(takes.slice(0, 20))); } catch {} };
+  let current = EXAMPLES[0], ctl = null, lastError = "";
+
+  // ---------- Capabilities ----------
+  const use = name => (window.claude && window.claude.use ? window.claude.use(name).catch(() => null) : Promise.resolve(null));
+  const samplePromise = use("sample");
+  use("downloads").then(d => { if (d) { $("#saveBtn").hidden = false; $("#saveBtn").onclick = () => saveFile(d); } });
+
+  // ---------- Stage ----------
+  function buildDoc(code, title) {
+    const safe = code.replace(/<\/script/gi, "<\\/script");
+    return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(title || "Animation")}</title>
+<style>html,body{margin:0;height:100%;overflow:hidden;background:#000}canvas{display:block;width:100%;height:100%}</style></head>
+<body><canvas id="c"></canvas><script>
+const canvas=document.getElementById("c"),ctx=canvas.getContext("2d");let W=0,H=0;
+const mouse={x:0,y:0,down:false,inside:false};
+function fit(){const d=window.devicePixelRatio||1;W=innerWidth;H=innerHeight;canvas.width=Math.round(W*d);canvas.height=Math.round(H*d);ctx.setTransform(d,0,0,d,0,0);}
+fit();addEventListener("resize",fit);
+canvas.addEventListener("pointermove",e=>{mouse.x=e.offsetX;mouse.y=e.offsetY;mouse.inside=true;});
+canvas.addEventListener("pointerleave",()=>{mouse.inside=false;mouse.down=false;});
+canvas.addEventListener("pointerdown",e=>{mouse.down=true;mouse.x=e.offsetX;mouse.y=e.offsetY;});
+addEventListener("pointerup",()=>{mouse.down=false;});
+addEventListener("error",e=>{try{parent.postMessage({type:"frameshift-error",message:String(e.message||e.error)},"*")}catch(_){}});
+<\/script><script>
+try{
+${safe}
+}catch(err){parent.postMessage({type:"frameshift-error",message:String(err&&err.message||err)},"*");}
+<\/script></body></html>`;
+  }
+  function escapeHtml(s) { return String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
+
+  function play(take) {
+    current = take; lastError = "";
+    $("#errbox").hidden = true;
+    $("#animTitle").textContent = take.title;
+    $("#animNote").textContent = take.note || take.prompt;
+    $("#code").textContent = take.code.trim();
+    $("#frame").srcdoc = buildDoc(take.code, take.title);
+    renderReel();
+  }
+  window.addEventListener("message", e => {
+    if (e.source !== $("#frame").contentWindow || !e.data || e.data.type !== "frameshift-error") return;
+    lastError = e.data.message;
+    $("#errText").textContent = "This animation hit an error: " + lastError;
+    $("#errbox").hidden = false;
+  });
+
+  // ---------- Asking Claude ----------
+  const RULES = `You write animations for a web page. Your JavaScript runs as a classic <script> inside an HTML page that already contains a full-window <canvas>.
+These globals already exist, do NOT redeclare them:
+- canvas: the HTMLCanvasElement
+- ctx: its 2D context (already scaled for high-DPI screens, draw in CSS pixels)
+- W, H: current width and height in CSS pixels. They change when the window resizes, so read them every frame. Never cache them in const at the start.
+- mouse: {x, y, down, inside}, kept up to date for you.
+Rules:
+- Use only Canvas 2D and plain JavaScript. No imports, no libraries, no network, no images or fonts to load, no DOM elements other than the canvas. Emoji drawn with ctx.fillText are allowed.
+- Animate with requestAnimationFrame and time-based motion (use the timestamp). It must keep playing forever or loop smoothly.
+- Make it look impressive and polished: a full background, depth, smooth motion, gradients, glow, shadows, particles, easing, where it suits the idea. Characters and objects should be clearly recognisable, built from shapes.
+- Fill the whole canvas at every size, including a phone-sized canvas. Position things relative to W and H.
+- Keep it under about 250 lines. The code must run without errors.
+Reply with ONLY a JSON object, no other text:
+{"title": "short title, max 6 words", "note": "one short sentence telling the viewer what to watch for or how to interact", "code": "the JavaScript"}`;
+
+  async function ask(prompt, busyText) {
+    const sample = await samplePromise;
+    if (!sample) {
+      setStatus("Making new animations needs Claude. Open this page on claude.ai to use it. The examples still play here.", "err");
+      return null;
+    }
+    ctl?.abort(); ctl = new AbortController();
+    $("#makingText").textContent = busyText;
+    $("#making").hidden = false;
+    setBusy(true); setStatus("Working on it…");
+    try {
+      const out = await sample.json(prompt, { signal: ctl.signal, cache: false, modelTier: "default" });
+      if (!out || typeof out.code !== "string" || !out.code.trim()) throw { code: "invalid_json" };
+      setStatus("Done. Your animation is playing.", "ok");
+      return out;
+    } catch (e) {
+      const msgs = {
+        cancelled: "Stopped.",
+        not_granted: "Claude wasn't allowed to run for this page, so it can't make animations here.",
+        sampling_disabled: "Claude isn't available on this account.",
+        rate_limited: "You've made a lot of animations quickly. Wait a minute, then try again.",
+        refused: "Claude won't make that one. Try describing something different.",
+        invalid_json: "The answer came back in the wrong shape. Press the button again.",
+        session_expired: "Your claude.ai sign-in expired. Sign in again, then retry."
+      };
+      setStatus(msgs[e && e.code] || "Something went wrong reaching Claude. Try again in a moment.", e && e.code === "cancelled" ? "" : "err");
+      return null;
+    } finally {
+      $("#making").hidden = true; setBusy(false);
+    }
+  }
+
+  function addTake(out, prompt) {
+    const take = { id: "t" + Date.now(), title: String(out.title || "Untitled animation").slice(0, 60), note: String(out.note || ""), prompt, code: out.code };
+    takes.unshift(take); saveTakes(); play(take);
+  }
+
+  async function make() {
+    const text = $("#prompt").value.trim();
+    if (!text) { setStatus("Describe your animation first. What should happen, and what should be in it?", "err"); $("#prompt").focus(); return; }
+    const wish = `${text}\nStyle: ${style}.${extras.size ? " Extras: " + [...extras].join(", ") + "." : ""}`;
+    const out = await ask(`${RULES}\n\nThe viewer asked for this animation:\n"""${wish}"""`, "Claude is drawing your animation…");
+    if (out) addTake(out, text);
+  }
+
+  async function change(request, busyText) {
+    if (!request) { setStatus("Type what you want to change first.", "err"); $("#change").focus(); return; }
+    const prompt = `${RULES}\n\nHere is the current animation, titled "${current.title}", made from the request "${current.prompt}":\n\`\`\`js\n${current.code}\n\`\`\`\n\nChange it like this:\n"""${request}"""\nReturn the complete new code, not a diff. Keep everything the viewer didn't ask to change.`;
+    const out = await ask(prompt, busyText);
+    if (out) { $("#change").value = ""; addTake(out, current.prompt + " → " + request); }
+  }
+
+  // ---------- Files ----------
+  async function saveFile(downloads) {
+    const name = current.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "animation";
+    try { await downloads.save({ filename: name + ".html", data: buildDoc(current.code, current.title) }); setStatus("Saved. Open the file in any browser to play it.", "ok"); }
+    catch (e) { if (e && e.code !== "cancelled" && e.code !== "declined") setStatus("The file couldn't be saved.", "err"); }
+  }
+
+  // ---------- UI ----------
+  function setStatus(t, kind) { const s = $("#status"); s.textContent = t; s.className = "status" + (kind ? " " + kind : ""); }
+  function setBusy(b) { $("#makeBtn").disabled = $("#changeBtn").disabled = $("#fixBtn").disabled = b; }
+
+  function renderReel() {
+    const all = [...takes.map(t => ({ ...t, mine: true })), ...EXAMPLES];
+    $("#reel").innerHTML = "";
+    for (const t of all) {
+      const b = document.createElement("button");
+      b.className = "take"; b.setAttribute("aria-current", t.id === current.id);
+      const em = document.createElement("em"); em.textContent = t.mine ? "Yours" : "Example";
+      const bt = document.createElement("b"); bt.textContent = t.title;
+      const sp = document.createElement("span"); sp.textContent = t.prompt;
+      b.append(em, bt, sp);
+      b.onclick = () => { play(t); $("#stage").scrollIntoView({ behavior: "smooth", block: "nearest" }); };
+      $("#reel").append(b);
+    }
+  }
+
+  function chipGroup(el, items, isOn, onClick) {
+    el.innerHTML = "";
+    for (const it of items) {
+      const c = document.createElement("button"); c.className = "chip"; c.textContent = it;
+      if (isOn) c.setAttribute("aria-pressed", isOn(it));
+      c.onclick = () => { onClick(it); if (isOn) el.querySelectorAll(".chip").forEach(x => x.setAttribute("aria-pressed", isOn(x.textContent))); };
+      el.append(c);
+    }
+  }
+  chipGroup($("#ideas"), IDEAS, null, t => { $("#prompt").value = t; $("#prompt").focus(); });
+  chipGroup($("#styles"), STYLES, s => s === style, s => { style = s; });
+  chipGroup($("#extras"), EXTRAS, s => extras.has(s), s => { extras.has(s) ? extras.delete(s) : extras.add(s); });
+
+  $("#makeBtn").onclick = make;
+  $("#prompt").addEventListener("keydown", e => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) make(); });
+  $("#changeBtn").onclick = () => change($("#change").value.trim(), "Claude is changing your animation…");
+  $("#change").addEventListener("keydown", e => { if (e.key === "Enter") $("#changeBtn").click(); });
+  $("#fixBtn").onclick = () => change(`It crashes with this error: ${lastError}. Fix the bug so it runs, and keep the animation the same.`, "Claude is fixing the bug…");
+  $("#stopBtn").onclick = () => ctl?.abort();
+  $("#replayBtn").onclick = () => play(current);
+  $("#fullBtn").onclick = () => { const el = $("#stage"); (el.requestFullscreen ? el.requestFullscreen() : Promise.reject()).catch(() => setStatus("Full screen isn't available here.", "err")); };
+  $("#codeBtn").onclick = () => { const c = $("#code"); c.hidden = !c.hidden; $("#codeBtn").textContent = c.hidden ? "Show code" : "Hide code"; $("#codeBtn").setAttribute("aria-expanded", !c.hidden); };
+  $("#copyBtn").onclick = () => {
+    const text = current.code.trim();
+    (navigator.clipboard ? navigator.clipboard.writeText(text) : Promise.reject()).then(
+      () => setStatus("Code copied.", "ok"),
+      () => { const c = $("#code"); c.hidden = false; const r = document.createRange(); r.selectNodeContents(c); const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r); setStatus("Copying was blocked. The code is selected, press Ctrl+C.", "err"); }
+    );
+  };
+
+  play(takes[0] || EXAMPLES[0]);
+})();
+</script>
+</body>
+</html>
