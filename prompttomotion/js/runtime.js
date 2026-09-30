@@ -1,20 +1,25 @@
 /*
- * PromptToMotion player runtime.
+ * PromptToMotion player runtime (v2).
  *
  * This function never runs in the main page. app.js turns it into a string with
  * PTM_runtime.toString() and injects it into the sandboxed preview <iframe>, next to the
  * scene code (written by Claude, the mock generator, or a built-in example).
  *
  * It owns everything that touches the scene:
- *   - the canvas and a deterministic clock (true FPS: draw() is only sampled on frame boundaries)
+ *   - the canvas and a deterministic clock (true FPS: the scene is only sampled on frame boundaries)
  *   - play / pause / loop / seek / frame step, driven by postMessage from the page
+ *   - CAMERA moves (push, pull, pan, orbit, crane, handheld), applied to every scene
+ *   - LIGHTING looks (natural, cinematic, neon, golden hour, moonlit, studio): colour grade, bloom, vignette, rays
+ *   - MOTION BLUR by temporal supersampling (several sub-frames averaged per output frame)
+ *   - PHYSICS: an optional simulate() step is baked once, so springs, cloth and ropes scrub and export correctly
  *   - the exporters: MP4 or WebM (MediaRecorder), GIF (own encoder), Lottie (image-sequence JSON)
  *
  * Scene contract (what generated code must provide):
- *   function setup(W, H) { return state }        // optional, runs once
- *   function draw(ctx, t, info) { ... }         // required, called once per frame
- *   info = { W, H, duration, progress, frame, frames, fps, state }
- * Helpers available to scenes: TAU, clamp, lerp, hash, noise, ease.*, and a seeded Math.random.
+ *   function setup(W, H) { return state }              // optional, runs once
+ *   function simulate(state, dt, t, info) { ... }      // optional, fixed-step physics, mutates state
+ *   function draw(ctx, t, info) { ... }                // required, called once per frame (and per blur sub-frame)
+ *   info = { W, H, duration, progress, frame, frames, fps, state, camera, light }
+ * Helpers available to scenes: TAU, clamp, lerp, hash, noise, ease.*, PHYS.*, and a seeded Math.random.
  */
 function PTM_runtime(CONFIG) {
   const post = (ev, data) => parent.postMessage(Object.assign({ ptm: true, sid: CONFIG.sid, ev }, data || {}), "*");
@@ -33,7 +38,33 @@ function PTM_runtime(CONFIG) {
     outBack: x => { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2); },
     outElastic: x => (x <= 0 ? 0 : x >= 1 ? 1 : Math.pow(2, -10 * x) * Math.sin((x * 10 - 0.75) * (TAU / 3)) + 1)
   };
-  Object.assign(window, { TAU, clamp, lerp, hash, noise, ease });
+  // Physics helpers for characters, cloth and ropes. Use them inside simulate(); they are plain functions.
+  const PHYS = {
+    // Damped spring. s = { x, v }. Moves s.x toward target; returns s.x.
+    spring(s, target, k, d, dt) { s.v += (-k * (s.x - target) - d * s.v) * dt; s.x += s.v * dt; return s.x; },
+    // Two-bone inverse kinematics (legs, arms). Returns the joint (knee/elbow) and the reachable end point.
+    ik2(ax, ay, tx, ty, l1, l2, dir) {
+      let dx = tx - ax, dy = ty - ay, d = Math.hypot(dx, dy) || 1e-3;
+      const max = l1 + l2 - 1e-3; if (d > max) { dx *= max / d; dy *= max / d; d = max; }
+      const a = (l1 * l1 - l2 * l2 + d * d) / (2 * d), h = Math.sqrt(Math.max(0, l1 * l1 - a * a)), s = dir || 1;
+      return { x: ax + (dx * a) / d - (s * dy * h) / d, y: ay + (dy * a) / d + (s * dx * h) / d, ex: ax + dx, ey: ay + dy };
+    },
+    // Verlet chain (scarf, hair, tail, rope). Make one with makeChain, then call chain() every simulate() step.
+    makeChain(n, x, y, len) { return Array.from({ length: n }, (_, i) => ({ x: x - i * (len || 10), y, px: x - i * (len || 10), py: y, len: len || 10 })); },
+    chain(pts, ax, ay, dt, o) {
+      o = o || {}; const g = o.gravity == null ? 600 : o.gravity, damp = o.damping == null ? 0.985 : o.damping, wind = o.wind || 0;
+      pts[0].x = ax; pts[0].y = ay; pts[0].px = ax; pts[0].py = ay;
+      for (let i = 1; i < pts.length; i++) {
+        const p = pts[i], vx = (p.x - p.px) * damp, vy = (p.y - p.py) * damp;
+        p.px = p.x; p.py = p.y; p.x += vx + wind * dt * dt; p.y += vy + g * dt * dt;
+      }
+      for (let it = 0; it < (o.iters || 5); it++) for (let i = 1; i < pts.length; i++) {
+        const a = pts[i - 1], b = pts[i], dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy) || 1e-3, k = (d - b.len) / d;
+        if (i === 1) { b.x -= dx * k; b.y -= dy * k; } else { a.x += dx * k * 0.5; a.y += dy * k * 0.5; b.x -= dx * k * 0.5; b.y -= dy * k * 0.5; }
+      }
+    }
+  };
+  Object.assign(window, { TAU, clamp, lerp, hash, noise, ease, PHYS });
 
   // Math.random is reseeded before setup() and before every frame, so the same frame always looks the same.
   const mulberry = a => () => { a |= 0; a = (a + 0x6d2b79f5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
@@ -42,16 +73,18 @@ function PTM_runtime(CONFIG) {
   // ---------- state ----------
   const S = {
     W: CONFIG.W, H: CONFIG.H, fps: CONFIG.fps, duration: CONFIG.duration, pixel: CONFIG.pixel || 1,
+    camMode: CONFIG.camera || "static", camK: CONFIG.camK == null ? 1 : CONFIG.camK, light: CONFIG.light || "none", blur: CONFIG.blur || 0,
     loop: CONFIG.loop !== false, playing: CONFIG.autoplay !== false, t: 0, lastFrame: -1, dirty: true,
-    ready: false, broken: false, state: null, drawFn: null, setupFn: null
+    ready: false, broken: false, state: null, snaps: null, drawFn: null, setupFn: null, simFn: null, subCap: 99, ema: 0
   };
   const frames = () => Math.max(1, Math.round(S.duration * S.fps));
   const frameAt = t => Math.min(frames() - 1, Math.floor(t * S.fps + 1e-6));
 
   const view = document.getElementById("view");
   const dpr = Math.min(2, window.devicePixelRatio || 1);
-  view.width = Math.round(S.W * dpr);
-  view.height = Math.round(S.H * dpr);
+  const vscale = Math.min(dpr, 1280 / Math.max(S.W, S.H));
+  view.width = Math.round(S.W * vscale);
+  view.height = Math.round(S.H * vscale);
   const vctx = view.getContext("2d");
   let low = null;
 
@@ -68,8 +101,117 @@ function PTM_runtime(CONFIG) {
     c.shadowBlur = 0; c.shadowColor = "transparent"; c.filter = "none";
   }
 
-  // Draw frame `frame` (time t) into a target context whose pixel size is cw x ch.
-  function drawScene(c, cw, ch, t, frame) {
+  // ---------- camera ----------
+  // Returns { x, y, zoom, rot }: x and y are fractions of the frame. Every mode over-scans so edges never show.
+  function cameraAt(p) {
+    const k = S.camK, e = ease.inOut(p), a = p * TAU;
+    switch (S.camMode) {
+      case "push": return { x: 0, y: 0, zoom: 1 + 0.32 * k * e, rot: 0 };
+      case "pull": return { x: 0, y: 0, zoom: 1 + 0.32 * k * (1 - e), rot: 0 };
+      case "panl": return { x: (0.5 - p) * 0.14 * k, y: 0, zoom: 1 + 0.16 * k, rot: 0 };
+      case "panr": return { x: (p - 0.5) * 0.14 * k, y: 0, zoom: 1 + 0.16 * k, rot: 0 };
+      case "orbit": return { x: Math.sin(a) * 0.05 * k, y: -Math.cos(a) * 0.02 * k, zoom: 1.1 + 0.06 * k, rot: Math.sin(a) * 0.045 * k };
+      case "crane": return { x: 0, y: (0.5 - e) * 0.13 * k, zoom: 1 + 0.15 * k, rot: (e - 0.5) * 0.03 * k };
+      case "handheld": return { x: 0.007 * k * (Math.sin(a * 7 + 1) + 0.6 * Math.sin(a * 13 + 2)), y: 0.006 * k * (Math.sin(a * 9 + 3) + 0.5 * Math.sin(a * 17)), zoom: 1.05 + 0.02 * k, rot: 0.006 * k * Math.sin(a * 5 + 4) };
+      default: return { x: 0, y: 0, zoom: 1, rot: 0 };
+    }
+  }
+  function applyCamera(c, cam) {
+    if (cam.zoom === 1 && !cam.x && !cam.y && !cam.rot) return;
+    c.translate(S.W / 2, S.H / 2); c.rotate(cam.rot); c.scale(cam.zoom, cam.zoom); c.translate(-S.W / 2 + cam.x * S.W, -S.H / 2 + cam.y * S.H);
+  }
+
+  // ---------- lighting ----------
+  // What scenes are told (info.light): dx, dy point TOWARD the light (screen coordinates, y down). Shadows fall the other way.
+  const LIGHTS = {
+    none: { style: "none", dx: -0.5, dy: -0.85, color: "#ffffff", color2: "#ffffff", ambient: 0.5, shadow: "rgba(0,0,0,0.25)" },
+    natural: { style: "natural", dx: -0.55, dy: -0.83, color: "#fff1d6", color2: "#cfe3ff", ambient: 0.45, shadow: "rgba(20,30,60,0.28)" },
+    cinematic: { style: "cinematic", dx: 0.65, dy: -0.5, color: "#ffd2a0", color2: "#3c8fb0", ambient: 0.28, shadow: "rgba(6,24,40,0.45)" },
+    neon: { style: "neon", dx: 0, dy: -0.3, color: "#ff3df2", color2: "#22d3ee", ambient: 0.18, shadow: "rgba(0,0,0,0.55)" },
+    golden: { style: "golden", dx: 0.85, dy: -0.35, color: "#ffb45a", color2: "#ffd9a0", ambient: 0.36, shadow: "rgba(60,20,10,0.38)" },
+    moonlit: { style: "moonlit", dx: -0.4, dy: -0.9, color: "#a9c1ff", color2: "#6d86d6", ambient: 0.2, shadow: "rgba(0,0,20,0.5)" },
+    studio: { style: "studio", dx: -0.3, dy: -0.95, color: "#ffffff", color2: "#e8eefc", ambient: 0.6, shadow: "rgba(0,0,0,0.2)" }
+  };
+  // How the picture is graded after the scene is drawn. Blend modes: multiply darkens, screen and soft-light lift.
+  const LOOKS = {
+    none: null,
+    natural: { vig: 0.28, bloom: 0.16, tints: [["soft-light", "rgba(255,214,150,0.30)", "radial"]], rays: 0.09 },
+    cinematic: { vig: 0.62, bloom: 0.26, tints: [["multiply", "rgba(24,70,96,0.24)", "flat"], ["soft-light", "rgba(255,150,70,0.34)", "radial"]], bars: true, rays: 0.06 },
+    neon: { vig: 0.55, bloom: 0.8, tints: [["screen", "rgba(255,0,190,0.11)", "edgeL"], ["screen", "rgba(0,210,255,0.09)", "edgeR"]], scan: 0.07 },
+    golden: { vig: 0.36, bloom: 0.34, tints: [["soft-light", "rgba(255,160,40,0.46)", "radial"]], rays: 0.17 },
+    moonlit: { vig: 0.5, bloom: 0.22, tints: [["soft-light", "rgba(80,110,255,0.42)", "flat"], ["multiply", "rgba(130,150,225,0.16)", "flat"]], rays: 0.05 },
+    studio: { vig: 0.14, bloom: 0.08, tints: [] }
+  };
+  let bl = null, bl2 = null, rays = null, scanPat = null;
+  function grade(c, cw, ch, t) {
+    const look = LOOKS[S.light]; if (!look) return;
+    const L = LIGHTS[S.light], lx = cw * (0.5 + L.dx * 0.42), ly = ch * (0.5 + L.dy * 0.42), diag = Math.hypot(cw, ch);
+    resetCtx(c);
+    if (look.bloom) {   // bright-biased blur: shrink, square the colours (keeps highlights), stretch back and add
+      const w1 = Math.max(8, Math.round(cw / 8)), h1 = Math.max(8, Math.round(ch / 8));
+      if (!bl || bl.width !== w1 || bl.height !== h1) { bl = document.createElement("canvas"); bl.width = w1; bl.height = h1; bl2 = document.createElement("canvas"); bl2.width = Math.max(4, w1 >> 1); bl2.height = Math.max(4, h1 >> 1); }
+      const b = bl.getContext("2d"); resetCtx(b); b.imageSmoothingEnabled = true; b.drawImage(c.canvas, 0, 0, w1, h1);
+      b.globalCompositeOperation = "multiply"; b.drawImage(bl, 0, 0);
+      const b2 = bl2.getContext("2d"); resetCtx(b2); b2.drawImage(bl, 0, 0, bl2.width, bl2.height);
+      c.globalCompositeOperation = "screen"; c.imageSmoothingEnabled = true;
+      c.globalAlpha = look.bloom; c.drawImage(bl, 0, 0, cw, ch);
+      c.globalAlpha = look.bloom * 0.9; c.drawImage(bl2, 0, 0, cw, ch);
+      c.globalAlpha = 1;
+    }
+    for (const [mode, col, shape] of look.tints) {
+      c.globalCompositeOperation = mode;
+      let g;
+      if (shape === "radial") { g = c.createRadialGradient(lx, ly, 0, lx, ly, diag * 0.8); g.addColorStop(0, col); g.addColorStop(1, "rgba(0,0,0,0)"); }
+      else if (shape === "edgeL" || shape === "edgeR") { g = c.createLinearGradient(shape === "edgeL" ? 0 : cw, 0, cw / 2, 0); g.addColorStop(0, col); g.addColorStop(1, "rgba(0,0,0,0)"); }
+      else g = col;
+      c.fillStyle = g; c.fillRect(0, 0, cw, ch);
+    }
+    if (look.rays) {    // soft light shafts from the light's side, drifting slowly (drawn small and layered, so the edges feather)
+      const rw = Math.max(8, Math.round(cw / 10)), rh = Math.max(8, Math.round(ch / 10)), k = rw / cw;
+      if (!rays || rays.width !== rw || rays.height !== rh) { rays = document.createElement("canvas"); rays.width = rw; rays.height = rh; }
+      const r = rays.getContext("2d"); resetCtx(r); r.clearRect(0, 0, rw, rh); r.globalCompositeOperation = "lighter";
+      const ox = lx * k, oy = ly * k, dg = diag * k;
+      for (let i = 0; i < 8; i++) {
+        const a = Math.atan2(-L.dy, -L.dx) + (i - 3.5) * 0.15 + Math.sin(t * 0.6 + i * 1.7) * 0.03, w = 0.03 + 0.012 * Math.sin(t * 0.9 + i), al = look.rays * (0.7 + 0.3 * Math.sin(t * 0.8 + i * 2)) / 3;
+        const g = r.createLinearGradient(ox, oy, ox + Math.cos(a) * dg, oy + Math.sin(a) * dg);
+        g.addColorStop(0, "rgba(255,240,210," + al + ")"); g.addColorStop(1, "rgba(255,240,210,0)");
+        r.fillStyle = g;
+        for (const f of [1, 0.62, 0.3]) { r.beginPath(); r.moveTo(ox, oy); r.lineTo(ox + Math.cos(a - w * f) * dg, oy + Math.sin(a - w * f) * dg); r.lineTo(ox + Math.cos(a + w * f) * dg, oy + Math.sin(a + w * f) * dg); r.closePath(); r.fill(); }
+      }
+      c.globalCompositeOperation = "screen"; c.imageSmoothingEnabled = true; c.drawImage(rays, 0, 0, cw, ch);
+    }
+    c.globalCompositeOperation = "source-over";
+    if (look.scan) {
+      if (!scanPat) { const s = document.createElement("canvas"); s.width = 4; s.height = 3; const sc = s.getContext("2d"); sc.fillStyle = "rgba(0,0,0,1)"; sc.fillRect(0, 0, 4, 1); scanPat = c.createPattern(s, "repeat"); }
+      c.globalAlpha = look.scan; c.fillStyle = scanPat; c.fillRect(0, 0, cw, ch); c.globalAlpha = 1;
+    }
+    if (look.vig) {
+      const g = c.createRadialGradient(cw / 2, ch / 2, Math.min(cw, ch) * 0.32, cw / 2, ch / 2, diag * 0.6);
+      g.addColorStop(0, "rgba(0,0,0,0)"); g.addColorStop(1, "rgba(0,0,0," + look.vig + ")");
+      c.fillStyle = g; c.fillRect(0, 0, cw, ch);
+    }
+    if (look.bars && cw / ch > 1.5) { const bar = Math.max(0, (ch - cw / 2.2) / 2); c.fillStyle = "#000"; c.fillRect(0, 0, cw, bar); c.fillRect(0, ch - bar, cw, bar); }
+  }
+
+  // ---------- physics (baked once, so scrubbing and export are exact) ----------
+  const cloneState = st => (typeof structuredClone === "function" ? structuredClone(st) : JSON.parse(JSON.stringify(st)));
+  function bake() {
+    S.snaps = null;
+    if (typeof S.simFn !== "function") return;
+    seed(0);
+    const st = typeof S.setupFn === "function" ? S.setupFn(S.W, S.H) : {}, N = frames(), SUB = 4, dt = 1 / (S.fps * SUB), snaps = [];
+    S.state = st;
+    for (let f = 0; f < N; f++) {
+      for (let s = 0; s < SUB; s++) { seed(f * SUB + s + 7); S.simFn(st, dt, f / S.fps + s * dt, { W: S.W, H: S.H, fps: S.fps, duration: S.duration, frame: f }); }
+      snaps.push(cloneState(st));
+    }
+    S.snaps = snaps;
+  }
+  const stateAt = f => (S.snaps ? S.snaps[clamp(f, 0, S.snaps.length - 1)] : S.state);
+
+  // ---------- drawing one picture ----------
+  // paintScene: camera + scene into a context (used for the picture itself and for every motion-blur sub-frame).
+  function paintScene(c, cw, ch, t, frame) {
     resetCtx(c);
     c.fillStyle = "#000"; c.fillRect(0, 0, cw, ch);
     let target = c, scale = cw / S.W;
@@ -82,13 +224,37 @@ function PTM_runtime(CONFIG) {
     }
     target.save();
     target.setTransform(scale, 0, 0, scale, 0, 0);
+    const p = t / S.duration, cam = cameraAt(p);
+    applyCamera(target, cam);
     seed(frame + 1);
     try {
-      S.drawFn(target, t, { W: S.W, H: S.H, duration: S.duration, progress: t / S.duration, frame, frames: frames(), fps: S.fps, state: S.state });
+      S.drawFn(target, t, { W: S.W, H: S.H, duration: S.duration, progress: p, frame, frames: frames(), fps: S.fps, state: stateAt(frame), camera: cam, light: LIGHTS[S.light] || LIGHTS.none });
     } catch (e) { fail(e); }
     target.restore();
     if (S.pixel > 1) { resetCtx(c); c.imageSmoothingEnabled = false; c.drawImage(low, 0, 0, cw, ch); c.imageSmoothingEnabled = true; }
   }
+
+  // renderAt: the finished picture at time t. subs > 1 averages that many sub-frames across a 180-degree shutter.
+  let bufs = null;
+  function renderAt(c, cw, ch, t, subs) {
+    const n = Math.max(1, subs | 0), frame = frameAt(t);
+    if (n === 1) paintScene(c, cw, ch, t, frame);
+    else {
+      if (!bufs || bufs.w !== cw || bufs.h !== ch) { const mk = () => { const e = document.createElement("canvas"); e.width = cw; e.height = ch; return e; }; bufs = { w: cw, h: ch, sub: mk(), acc: mk() }; }
+      const sc = bufs.sub.getContext("2d"), ac = bufs.acc.getContext("2d"), shutter = 0.5 / S.fps;
+      resetCtx(ac);
+      for (let k = 0; k < n; k++) {
+        const tk = clamp(t + (k / (n - 1) - 0.5) * shutter, 0, S.duration - 1e-6);
+        paintScene(sc, cw, ch, tk, frameAt(tk));
+        ac.globalAlpha = 1 / (k + 1); ac.drawImage(bufs.sub, 0, 0);
+      }
+      resetCtx(c); c.drawImage(bufs.acc, 0, 0);
+    }
+    grade(c, cw, ch, t);
+  }
+  const BLUR_PREVIEW = [1, 2, 3, 4], BLUR_EXPORT = [1, 4, 8, 12];
+  const previewSubs = () => Math.max(1, Math.min(BLUR_PREVIEW[S.blur] || 1, S.subCap));
+  const exportSubs = () => BLUR_EXPORT[S.blur] || 1;
 
   // ---------- playback clock ----------
   let lastTs = null, exporting = false, cancelExport = false;
@@ -106,7 +272,11 @@ function PTM_runtime(CONFIG) {
     const f = frameAt(S.t);
     if (f !== S.lastFrame || S.dirty) {
       S.lastFrame = f; S.dirty = false;
-      drawScene(vctx, view.width, view.height, f / S.fps, f);
+      const t0 = performance.now(), subs = previewSubs();
+      renderAt(vctx, view.width, view.height, f / S.fps, subs);
+      // If the preview can't keep up, lower the blur quality of the preview only (exports stay full quality).
+      const ms = performance.now() - t0; S.ema = S.ema ? S.ema * 0.9 + ms * 0.1 : ms;
+      if (S.playing && subs > 1 && S.ema > (1000 / S.fps) * 1.15) { S.subCap = subs - 1; S.ema = 0; post("perf", { subs: S.subCap }); }
       post("time", { t: S.t, frame: f, frames: frames(), playing: S.playing, duration: S.duration, fps: S.fps });
     }
   }
@@ -114,9 +284,8 @@ function PTM_runtime(CONFIG) {
   function snapshot(t, w) {
     const c = document.createElement("canvas");
     c.width = w; c.height = Math.round((w * S.H) / S.W);
-    const f = frameAt(t);
-    drawScene(c.getContext("2d"), c.width, c.height, f / S.fps, f);
-    return c.toDataURL("image/jpeg", 0.75);
+    renderAt(c.getContext("2d"), c.width, c.height, t, 1);
+    return c.toDataURL("image/jpeg", 0.78);
   }
 
   window.addEventListener("message", e => {
@@ -128,12 +297,19 @@ function PTM_runtime(CONFIG) {
       case "seek": S.t = clamp(+m.t || 0, 0, S.duration); S.dirty = true; break;
       case "step": S.playing = false; S.t = clamp(S.lastFrame + (m.n | 0), 0, frames() - 1) / S.fps; S.dirty = true; break;
       case "loop": S.loop = !!m.on; break;
-      case "config":
-        if (m.fps) S.fps = m.fps;
-        if (m.duration) S.duration = m.duration;
+      case "config": {
+        let rebake = false;
+        if (m.fps && m.fps !== S.fps) { S.fps = m.fps; rebake = true; }
+        if (m.duration && m.duration !== S.duration) { S.duration = m.duration; rebake = true; }
         if (m.pixel != null) S.pixel = m.pixel;
+        if (m.camera != null) S.camMode = m.camera;
+        if (m.camK != null) S.camK = m.camK;
+        if (m.light != null) S.light = m.light;
+        if (m.blur != null) { S.blur = m.blur; S.subCap = 99; S.ema = 0; }
+        if (rebake && S.ready) { try { bake(); } catch (err) { fail(err); } }
         S.t = Math.min(S.t, S.duration); S.dirty = true;
         break;
+      }
       case "thumb": if (S.ready && !S.broken) post("thumb", { url: snapshot(m.t != null ? m.t : S.duration * 0.4, m.w || 320) }); break;
       case "export": runExport(m.format); break;
       case "cancel": cancelExport = true; break;
@@ -159,31 +335,47 @@ function PTM_runtime(CONFIG) {
     }
   }
 
+  // Video is recorded in real time, so first measure how long one frame takes and pick a size and blur that keeps pace.
+  function pickVideoQuality() {
+    const budget = 1000 / S.fps, subs0 = exportSubs(), long0 = Math.max(S.W, S.H);
+    const options = [[1280, subs0], [1280, Math.ceil(subs0 / 2)], [960, Math.ceil(subs0 / 2)], [960, 1], [720, 1], [540, 1]];
+    let last = options[options.length - 1];
+    for (const [size, subs] of options) {
+      const w = even(S.W * (size / long0)), h = even(S.H * (size / long0));
+      const c = document.createElement("canvas"); c.width = w; c.height = h; const g = c.getContext("2d");
+      const t0 = performance.now(); for (let i = 0; i < 4; i++) renderAt(g, w, h, (i / 4) * S.duration, subs);
+      if ((performance.now() - t0) / 4 < budget * 0.7) return { size, subs, w, h };
+      last = [size, subs, w, h];
+    }
+    const size = last[0]; return { size, subs: last[1], w: even(S.W * (size / long0)), h: even(S.H * (size / long0)) };
+  }
+
   // MP4 where the browser can record it (recent Chrome, Edge, Safari), otherwise WebM.
   async function exportVideo() {
     if (typeof MediaRecorder === "undefined") throw new Error("This browser can't record video.");
     const types = ["video/mp4;codecs=avc1.42E01E", "video/mp4;codecs=avc1", "video/mp4", "video/webm;codecs=vp9", "video/webm;codecs=vp8", "video/webm"];
     const mime = types.find(t => MediaRecorder.isTypeSupported(t));
     if (!mime) throw new Error("This browser can't record video.");
-    const sc = 1280 / Math.max(S.W, S.H);
-    const c = document.createElement("canvas");
-    c.width = even(S.W * sc); c.height = even(S.H * sc);
+    progress(0, "Choosing a size that keeps your frame rate");
+    await breathe();
+    const q = pickVideoQuality();
+    const c = document.createElement("canvas"); c.width = q.w; c.height = q.h;
     const g = c.getContext("2d");
     const stream = c.captureStream(0), track = stream.getVideoTracks()[0];
-    const rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 8e6 });
+    const rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: q.size >= 1280 ? 10e6 : 6e6 });
     const chunks = [];
     rec.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
     const stopped = new Promise(r => { rec.onstop = r; });
     const N = frames();
-    drawScene(g, c.width, c.height, 0, 0);
+    renderAt(g, c.width, c.height, 0, q.subs);
     rec.start(250);
     const start = performance.now();
     try {
       for (let f = 0; f < N; f++) {
         checkCancel();
-        drawScene(g, c.width, c.height, f / S.fps, f);
+        renderAt(g, c.width, c.height, f / S.fps, q.subs);
         if (track.requestFrame) track.requestFrame();
-        progress((f + 1) / N, "Recording video in real time");
+        progress((f + 1) / N, "Recording at " + q.w + " px" + (q.subs > 1 ? " with motion blur" : ""));
         const wait = start + ((f + 1) * 1000) / S.fps - performance.now();
         await new Promise(r => setTimeout(r, Math.max(0, wait)));
       }
@@ -191,16 +383,16 @@ function PTM_runtime(CONFIG) {
       rec.stop(); await stopped; track.stop();
     }
     const type = mime.split(";")[0];
-    return { blob: new Blob(chunks, { type }), ext: type === "video/mp4" ? "mp4" : "webm", mime: type };
+    return { blob: new Blob(chunks, { type }), ext: type === "video/mp4" ? "mp4" : "webm", mime: type, width: q.w, blurred: q.subs > 1 };
   }
 
   // GIF: one shared 256-colour palette (median cut over sampled frames), ordered dithering, LZW.
   async function exportGif() {
-    const gfps = Math.min(S.fps, 30), N = Math.max(1, Math.round(S.duration * gfps));
+    const gfps = Math.min(S.fps, 24), N = Math.max(1, Math.round(S.duration * gfps)), subs = Math.min(exportSubs(), 4);
     const sc = Math.min(1, 480 / Math.max(S.W, S.H)), w = Math.round(S.W * sc), h = Math.round(S.H * sc);
     const c = document.createElement("canvas"); c.width = w; c.height = h;
     const g = c.getContext("2d", { willReadFrequently: true });
-    const render = i => { const t = i / gfps; drawScene(g, w, h, t, frameAt(t)); return g.getImageData(0, 0, w, h).data; };
+    const render = i => { renderAt(g, w, h, Math.min(S.duration - 1e-6, i / gfps), subs); return g.getImageData(0, 0, w, h).data; };
 
     const hist = new Uint32Array(32768), every = Math.max(1, Math.floor(N / 24));
     for (let i = 0; i < N; i += every) {
@@ -307,7 +499,7 @@ function PTM_runtime(CONFIG) {
   // Lottie: a valid Lottie JSON with one embedded image per frame. It plays in any Lottie player,
   // but it is raster, not vector (see docs/ARCHITECTURE.md for the vector path).
   async function exportLottie() {
-    const lfps = Math.min(S.fps, 24), N = Math.max(1, Math.round(S.duration * lfps));
+    const lfps = Math.min(S.fps, 24), N = Math.max(1, Math.round(S.duration * lfps)), subs = Math.min(exportSubs(), 4);
     const sc = Math.min(1, 480 / Math.max(S.W, S.H)), w = Math.round(S.W * sc), h = Math.round(S.H * sc);
     const c = document.createElement("canvas"); c.width = w; c.height = h;
     const g = c.getContext("2d");
@@ -315,8 +507,7 @@ function PTM_runtime(CONFIG) {
     const still = v => ({ a: 0, k: v });
     for (let i = 0; i < N; i++) {
       checkCancel();
-      const t = i / lfps;
-      drawScene(g, w, h, t, frameAt(t));
+      renderAt(g, w, h, Math.min(S.duration - 1e-6, i / lfps), subs);
       assets.push({ id: "frame_" + i, w, h, u: "", p: c.toDataURL("image/jpeg", 0.82), e: 1 });
       layers.push({ ddd: 0, ind: i + 1, ty: 2, nm: "Frame " + (i + 1), refId: "frame_" + i, sr: 1,
         ks: { o: still(100), r: still(0), p: still([0, 0, 0]), a: still([0, 0, 0]), s: still([100, 100, 100]) },
@@ -329,17 +520,18 @@ function PTM_runtime(CONFIG) {
   }
 
   // ---------- start (called by the last script tag, after the scene code has run) ----------
-  window.PTM_start = (drawFn, setupFn) => {
+  window.PTM_start = (drawFn, setupFn, simFn) => {
     try {
       if (typeof drawFn !== "function") throw new Error("The scene has no draw(ctx, t, info) function.");
-      S.drawFn = drawFn; S.setupFn = setupFn;
+      S.drawFn = drawFn; S.setupFn = setupFn; S.simFn = simFn;
       seed(0);
       S.state = typeof setupFn === "function" ? setupFn(S.W, S.H) : null;
+      bake();
       // Self-test: draw a few frames off screen so a scene that crashes mid-timeline is caught before it is shown.
       const tc = document.createElement("canvas");
       tc.width = Math.max(16, Math.round(S.W / 8)); tc.height = Math.max(16, Math.round(S.H / 8));
       for (const k of [0, 0.3, 0.6, 0.97]) {
-        drawScene(tc.getContext("2d"), tc.width, tc.height, k * S.duration, frameAt(k * S.duration));
+        renderAt(tc.getContext("2d"), tc.width, tc.height, k * S.duration, 1);
         if (S.broken) return;
       }
       S.ready = true; S.dirty = true;

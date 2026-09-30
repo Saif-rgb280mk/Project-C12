@@ -3,7 +3,7 @@
  * All colours point at CSS variables in css/app.css, so light and dark themes are one place to change.
  */
 const ptmTailwindConfig = {
-  content: ["./index.html", "./js/app.js"],
+  content: ["./index.html", "./js/app.js", "./js/fx.js"],
   theme: {
     extend: {
       colors: {

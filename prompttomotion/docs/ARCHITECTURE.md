@@ -7,8 +7,9 @@ This document covers three things you asked for: the recommended tech stack, how
 | Path | What it is |
 |---|---|
 | `index.html` | Landing page and studio (HTML + Tailwind classes). |
-| `js/app.js` | The app: form, generators, player control, exports, history. |
-| `js/runtime.js` | The player that runs **inside** a sandboxed iframe: clock, scrubbing, MP4/GIF/Lottie exporters. |
+| `js/app.js` | The app: form, generators, player control, exports, history, loading and reveal transitions. |
+| `js/fx.js` | Everything that makes the page itself move: entrance, particle hero, typing, tilt, glow, scroll reveals, the loading orb. See [ANIMATED_UI.md](ANIMATED_UI.md). |
+| `js/runtime.js` | The player that runs **inside** a sandboxed iframe: clock, scrubbing, camera, lighting, motion blur, baked physics, MP4/GIF/Lottie exporters. |
 | `js/scenes.js` | Example scenes and the offline **mock generator**. |
 | `js/tailwind.config.js` | Tailwind config (colours point at CSS variables). |
 | `css/app.css` | Colour tokens (light and dark), sliders, player and card styles. |
@@ -40,12 +41,26 @@ The trade-off: results look like polished motion graphics and illustrations, not
 Generated code must define:
 
 ```js
-function setup(W, H) { return state }        // optional, runs once
+function setup(W, H) { return state }               // optional, runs once
+function simulate(state, dt, t, info) { /* physics step, mutates state */ }   // optional
 function draw(ctx, t, info) { /* paint one frame */ }
-// info = { W, H, duration, progress, frame, frames, fps, state }
+// info = { W, H, duration, progress, frame, frames, fps, state, camera, light }
 ```
 
-Rules the runtime enforces or the prompt requires: `draw` must be a pure function of `t`; per-object data is built in `setup` with `hash(i)`; the canvas is cleared before every call; motion completes whole cycles per loop. The runtime also seeds `Math.random` per frame so even sloppy code renders the same frame the same way every time.
+Rules the runtime enforces or the prompt requires: `draw` must be a pure function of `t` and `info.state`; per-object data is built in `setup` with `hash(i)`; the canvas is cleared before every call; motion completes whole cycles per loop. The runtime also seeds `Math.random` per frame so even sloppy code renders the same frame the same way every time.
+
+### Detail controls: camera, lighting, motion blur, physics
+
+These are applied by the runtime around the scene, so they work on every animation (mock, Claude or example) and change the preview instantly, with no new model call.
+
+| Control | How it works |
+|---|---|
+| **Camera** (static, push in, pull out, pan left/right, orbit, crane, handheld, plus an intensity slider) | `cameraAt(progress)` returns `{ x, y, zoom, rot }`. The runtime applies it as a canvas transform before `draw`, with enough over-scan that edges never show. The same object is passed to the scene as `info.camera` so scenes can add parallax (`layer offset = info.camera.x * W * depth`). |
+| **Lighting** (natural sunlight, cinematic, neon glow, golden hour, moonlit, studio soft, as drawn) | Two parts. `info.light` tells the scene where the light is (`dx, dy` point toward it), its colours and shadow colour, so scenes shade consistently. After the scene is drawn, `grade()` adds a bright-biased bloom, tints with blend modes (multiply, screen, soft-light), feathered light shafts, scanlines (neon), a vignette and letterbox bars (cinematic). |
+| **Motion blur** (off, light, medium, heavy) | Temporal supersampling. Each output frame is drawn 1, 2, 3 or 4 times in the preview (1, 4, 8 or 12 times in exports) at times spread across a 180-degree shutter, and averaged with `globalAlpha = 1 / (k + 1)`. This is real blur from real motion, not a filter. If the preview can't keep up, it lowers its own sub-frame count and tells the user; exports stay full quality. |
+| **Frame rate** (12, 24, 30, 60) | The clock is sampled only on frame boundaries, so 60 fps really is 60 distinct pictures a second. Changing it rebakes physics and updates the frame counter. Video export benchmarks a few frames first and picks a size and blur level that can be recorded in real time without dropping speed. |
+| **Physics** (`simulate`) | The runtime calls `simulate` in fixed sub-steps once (4 per frame), stores a snapshot for every frame, and hands the right snapshot to `draw`. Because it is baked, scrubbing, looping, stepping and export all show the identical picture. Helpers: `PHYS.spring`, `PHYS.makeChain` and `PHYS.chain` (verlet rope, scarf, hair), `PHYS.ik2` (two-bone legs and arms). |
+| **Scene detail** (standard, high, ultra) and **fluid character physics** | These shape the brief sent to Claude (layer counts, particles, shading, secondary motion, when to use `simulate`). They apply to the next generation. The mock generator's richer layers (three parallax city layers, haze, glitter, motes, the running character) are always on. |
 
 ### Safety
 
@@ -54,7 +69,7 @@ Scene code is untrusted, so it runs in `<iframe sandbox="allow-scripts">` with n
 ## 3. How prompts are handled
 
 1. **Collect**: text (max 600 characters), plus `style`, `duration` (2–15 s), `aspect` (16:9, 9:16, 1:1) and `fps` (12, 24, 30, 60).
-2. **Map options to constraints** (`ASPECTS` and `rulesFor()` in `app.js`): aspect becomes a pixel size (960×540, 540×960, 720×720); style becomes a paragraph of art direction; duration and fps are passed as numbers.
+2. **Map options to constraints** (`ASPECTS` and `rulesFor()` in `app.js`): aspect becomes a pixel size (960×540, 540×960, 720×720); style becomes a paragraph of art direction; duration and fps are passed as numbers; camera, lighting and blur are named so the model doesn't redraw them; detail level and the physics switch pick the matching paragraphs.
 3. **Build the brief** = fixed rules (the contract, helpers, safety rules, output format) + style paragraph + the user's words inside triple quotes so they can't be mistaken for instructions.
 4. **Call the generator**. The reply must be one JSON object: `{ "title", "note", "code" }`.
 5. **Validate**: parse JSON, check `code` is a non-empty string, run the self-test in the iframe.
@@ -62,7 +77,7 @@ Scene code is untrusted, so it runs in `<iframe sandbox="allow-scripts">` with n
 7. **Save**: render a thumbnail, store the take (prompt, params, code, thumbnail) in history.
 8. **Edit later**: "Change this animation" sends the current code plus the change request and asks for the full new code, not a diff.
 
-Options that change a finished take without another model call: duration and fps (sent to the running player), aspect ratio (player reloads at the new size), and Pixel Art (the runtime renders at 1/4 resolution).
+Options that change a finished take without another model call: duration, fps, camera, camera intensity, lighting and motion blur (sent to the running player with a `config` message), aspect ratio (player reloads at the new size), and Pixel Art (the runtime renders at 1/4 resolution).
 
 ## 4. Recommended tech stack for a production version
 
@@ -117,6 +132,7 @@ Because the mock output goes through the same player, exporters and history as r
 | `Fish swimming in an aquarium with bubbles` | underwater sky, fish, bubbles |
 | `Confetti falling and the words "Happy Birthday"` | confetti and animated text |
 | `Sunset over the ocean with birds` | sun, sea, birds |
+| `A runner sprinting across city rooftops at sunset with a flowing scarf` | three parallax city layers, sun, the running character with a physics scarf and hair |
 
 ### Adding a keyword or layer
 1. Add `["balloons", /\b(balloons?|party)\b/]` to `PTM_KEYWORDS`.
@@ -128,4 +144,4 @@ Because the mock output goes through the same player, exporters and history as r
 
 ## 6. Tests
 
-The behaviours worth automating with Playwright: generate with Mock, change each parameter, scrub and step frames, export all three formats and check the files (GIF header and frame count, Lottie JSON keys, MP4 plays), reload and confirm history persists, and a scene that throws is reported instead of shown.
+The behaviours worth automating with Playwright: generate with Mock, change each parameter, scrub and step frames, export all three formats and check the files (GIF header and frame count, Lottie JSON keys, MP4 plays), reload and confirm history persists, and a scene that throws is reported instead of shown. For the detail engine, compare screenshots (for example with `pngjs`): the same time seeked twice must be pixel-identical (proves physics is baked), each camera and lighting option must differ from "static" and "as drawn", and heavy motion blur must differ from none. For the animated UI, run once with Motion loaded and once without it (the Web Animations fallback), and once with `reducedMotion: "reduce"`.

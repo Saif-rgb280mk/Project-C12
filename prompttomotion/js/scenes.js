@@ -145,7 +145,7 @@ const PTM_KEYWORDS = [
   ["sun", /\b(sun|sunny|sunset|sunrise|dawn|dusk|summer|desert|beach)/],
   ["clouds", /\b(clouds?|sky|rain|storm|windy|day)/],
   ["mountains", /\b(mountains?|hills?|landscape|valley|dragon|volcano)/],
-  ["city", /\b(city|cities|buildings?|skyline|street|town|cyber|urban|skyscraper)/],
+  ["city", /\b(city|cities|buildings?|skyline|street|town|cyber|urban|skyscraper|rooftops?)/],
   ["sea", /\b(sea|ocean|beach|waves?|boat|ship|sail|island)/],
   ["boat", /\b(boat|ship|sail|pirate)/],
   ["rain", /\b(rain|rainy|storm|stormy|drizzle|thunder)/],
@@ -162,7 +162,8 @@ const PTM_KEYWORDS = [
   ["hearts", /\b(love|hearts?|valentine|romantic|crush)/],
   ["neongrid", /\b(neon|synthwave|retro|80s|cyber|vaporwave|arcade)/],
   ["leaves", /\b(autumn|fall(ing)? leaves|leaf|leaves|forest)/],
-  ["car", /\b(cars?|drive|driving|road|race|racing|truck)/]
+  ["car", /\b(cars?|drive|driving|road|race|racing|truck)/],
+  ["character", /\b(person|people|man|woman|girl|boy|kid|child|hero|character|runner|running|run|sprint|sprinting|jog|jogging|ninja|athlete|explorer|traveller|traveler|parkour)\b/]
 ];
 
 function PTM_analyze(prompt) {
@@ -213,11 +214,13 @@ function makeTitle(prompt) {
 function titleCase(s) { return String(s).replace(/[^\w\s'!?-]/g, "").replace(/\b\w/g, c => c.toUpperCase()).trim(); }
 
 // The mock scene. CFG is prepended by PTM_mock(). Every layer is a pure function of progress p (0..1),
-// so the loop is seamless and scrubbing works.
+// so the loop is seamless and scrubbing works. The character's scarf and hair use simulate() (baked physics).
 function mockSceneTemplate() {
 const PAL = CFG.palette, STYLE = CFG.style, has = n => CFG.layers.includes(n);
 const INKED = STYLE === "anime" || STYLE === "frames";
+const RUN = has("character");
 const wrap = v => v - Math.floor(v);
+let DATA = null;
 function ink(ctx, w) { if (INKED) { ctx.lineWidth = w || 2.5; ctx.strokeStyle = PAL.ink; ctx.stroke(); } }
 function ball(ctx, x, y, r, col) {
   if (STYLE === "3d") {
@@ -233,6 +236,43 @@ function heart(ctx, x, y, s) {
   ctx.bezierCurveTo(x - s, y - s * 0.4, x - s * 0.5, y - s * 1.1, x, y - s * 0.5);
   ctx.bezierCurveTo(x + s * 0.5, y - s * 1.1, x + s, y - s * 0.4, x, y + s * 0.3);
 }
+// Draw fn(offsetX) twice so a pattern of width P repeats without a seam.
+function tile(P, off, fn) { const o = -(((off % P) + P) % P); fn(o); fn(o + P); }
+function mix(a, b, k) { const pa = parseInt(a.slice(1), 16), pb = parseInt(b.slice(1), 16); const c = (s) => Math.round(((pa >> s) & 255) * (1 - k) + ((pb >> s) & 255) * k); return "rgb(" + c(16) + "," + c(8) + "," + c(0) + ")"; }
+function limb(ctx, pts, w, col, hi, L) {
+  ctx.lineCap = "round"; ctx.lineJoin = "round";
+  if (INKED) { ctx.strokeStyle = PAL.ink; ctx.lineWidth = w + 5; ctx.beginPath(); pts.forEach((q, i) => (i ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1]))); ctx.stroke(); }
+  ctx.strokeStyle = col; ctx.lineWidth = w; ctx.beginPath(); pts.forEach((q, i) => (i ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1]))); ctx.stroke();
+  if (hi && STYLE !== "vector" && STYLE !== "pixel") {   // rim light on the side facing the light
+    ctx.strokeStyle = hi; ctx.globalAlpha = 0.55; ctx.lineWidth = Math.max(1.5, w * 0.28); ctx.beginPath();
+    pts.forEach((q, i) => (i ? ctx.lineTo(q[0] + L.dx * w * 0.28, q[1] + L.dy * w * 0.28) : ctx.moveTo(q[0] + L.dx * w * 0.28, q[1] + L.dy * w * 0.28))); ctx.stroke(); ctx.globalAlpha = 1;
+  }
+}
+
+// ---- runner: pose is a pure function of time, so physics (simulate) and drawing agree ----
+const GAIT_CYCLES = (dur) => Math.max(2, Math.round(dur * 1.4));
+function pose(t, W, H, dur) {
+  const p = t / dur, U = Math.min(H * 0.36, W * 0.5), ground = H * 0.84, cx = W * (W > H ? 0.36 : 0.5);
+  const l1 = U * 0.245, l2 = U * 0.245, gait = p * TAU * GAIT_CYCLES(dur);
+  const hipY = ground - (l1 + l2) * 0.9 - Math.cos(gait * 2) * U * 0.025, lean = 0.24 + Math.sin(gait * 2) * 0.02;
+  const foot = leg => {
+    const m = (((gait + leg * Math.PI) % TAU) + TAU) % TAU, stride = U * 0.3;
+    if (m < Math.PI) return { x: cx + stride * (1 - m / Math.PI), y: ground };
+    const q = (m - Math.PI) / Math.PI;
+    return { x: cx - stride + 2 * stride * ease.inOut(q), y: ground - Math.sin(q * Math.PI) * U * 0.2 };
+  };
+  const f0 = foot(0), f1 = foot(1), torso = U * 0.3;
+  const sx = cx + Math.sin(lean) * torso, sy = hipY - Math.cos(lean) * torso;
+  const hx = sx + Math.sin(lean * 0.6) * U * 0.14, hy = sy - Math.cos(lean * 0.6) * U * 0.14, r = U * 0.078;
+  const hand = leg => { const th = Math.sin(gait + leg * Math.PI + Math.PI) * 0.95; return { x: sx + Math.sin(th) * U * 0.3 + U * 0.07, y: sy + U * 0.3 - Math.abs(Math.sin(th)) * U * 0.09 }; };
+  return { U, ground, cx, l1, l2, hipY, lean, f: [f0, f1], sx, sy, hx, hy, r, hand: [hand(0), hand(1)], nx: sx - U * 0.01, ny: sy - U * 0.02, bx: hx - r * 0.75, by: hy - r * 0.35 };
+}
+var simulate = has("character") ? function (st, dt, t, info) {
+  const q = pose(t, info.W, info.H, info.duration);
+  PHYS.chain(st.scarf, q.nx, q.ny, dt, { gravity: 520, wind: -2100 + Math.sin(t * 7) * 380, damping: 0.986, iters: 6 });
+  PHYS.chain(st.hair, q.bx, q.by, dt, { gravity: 260, wind: -1100 + Math.sin(t * 9 + 1) * 250, damping: 0.98, iters: 4 });
+} : null;
+
 const L = {
   sky(ctx, p, W, H) {
     const g = ctx.createLinearGradient(0, 0, 0, H);
@@ -244,15 +284,17 @@ const L = {
       ctx.restore();
     }
   },
-  stars(ctx, p, W, H) {
-    for (let i = 0; i < 150; i++) { ctx.fillStyle = "rgba(255,255,255," + (0.2 + 0.7 * Math.abs(Math.sin(p * TAU * 3 + i))) + ")"; ctx.fillRect(hash(i) * W, hash(i + 40) * H * 0.75, 1.6, 1.6); }
+  stars(ctx, p, W, H, S, cam) {
+    for (let i = 0; i < 190; i++) { const b = hash(i + 9); ctx.fillStyle = "rgba(255,255,255," + (0.15 + 0.75 * Math.abs(Math.sin(p * TAU * (1 + (i % 3)) + i))) + ")"; ctx.fillRect(((hash(i) * W + cam.x * W * 0.05) % W + W) % W, hash(i + 40) * H * 0.72, 1 + b * 1.4, 1 + b * 1.4); }
   },
   sun(ctx, p, W, H) {
-    const low = CFG.sky === "sunset", x = W * (low ? 0.5 : 0.78), y = H * (low ? 0.6 : 0.22), r = Math.min(W, H) * (low ? 0.16 : 0.09);
-    const g = ctx.createRadialGradient(x, y, r * 0.5, x, y, r * 3);
-    g.addColorStop(0, "rgba(255,220,120,0.55)"); g.addColorStop(1, "rgba(255,200,100,0)");
+    const low = CFG.sky === "sunset", x = W * (low ? 0.5 : 0.78), y = H * (low ? 0.58 : 0.22), r = Math.min(W, H) * (low ? 0.16 : 0.09);
+    const g = ctx.createRadialGradient(x, y, r * 0.5, x, y, r * 3.4);
+    g.addColorStop(0, "rgba(255,220,120,0.6)"); g.addColorStop(1, "rgba(255,200,100,0)");
     ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
-    ball(ctx, x, y, r * (1 + 0.03 * Math.sin(p * TAU * 2)), low ? "#ff9f43" : PAL.accent);
+    const rr = r * (1 + 0.03 * Math.sin(p * TAU * 2)), sg = ctx.createRadialGradient(x - rr * 0.2, y - rr * 0.2, rr * 0.05, x, y, rr);
+    sg.addColorStop(0, "#fffbe8"); sg.addColorStop(0.55, low ? "#ffb347" : PAL.accent); sg.addColorStop(1, low ? "#ff7a3a" : mix(PAL.accent, "#ff9a3a", 0.5));
+    ctx.fillStyle = sg; ctx.beginPath(); ctx.arc(x, y, rr, 0, TAU); ctx.fill(); ink(ctx, Math.max(1.5, rr * 0.06));
   },
   moon(ctx, p, W, H) {
     const x = W * 0.8, y = H * 0.2, r = Math.min(W, H) * 0.07;
@@ -260,44 +302,116 @@ const L = {
     ball(ctx, x, y, r, "#f4f1e1");
     ctx.fillStyle = PAL.sky[0]; ctx.beginPath(); ctx.arc(x + r * 0.45, y - r * 0.2, r * 0.9, 0, TAU); ctx.fill();
   },
-  clouds(ctx, p, W, H) {
-    for (let i = 0; i < 6; i++) {
-      const x = wrap(hash(i) + p * (i % 2 ? 1 : 2)) * (W + 320) - 160, y = H * (0.1 + hash(i + 7) * 0.3), s = 30 + hash(i + 3) * 30;
-      ctx.fillStyle = CFG.sky === "night" ? "rgba(160,170,210,0.25)" : "rgba(255,255,255,0.9)";
-      ctx.beginPath(); for (const [dx, dy, r] of [[0, 0, 1], [0.9, 0.2, 0.8], [-0.9, 0.25, 0.75], [0.3, -0.4, 0.8]]) { ctx.moveTo(x + dx * s + r * s, y + dy * s); ctx.arc(x + dx * s, y + dy * s, r * s, 0, TAU); }
+  clouds(ctx, p, W, H, S, cam) {
+    for (let i = 0; i < 7; i++) {
+      const depth = 0.3 + hash(i + 2) * 0.7, x = wrap(hash(i) + p * (i % 2 ? 1 : 2)) * (W + 380) - 190 + cam.x * W * depth * 0.2, y = H * (0.08 + hash(i + 7) * 0.3), s = (26 + hash(i + 3) * 34) * (0.7 + depth * 0.5);
+      ctx.fillStyle = INKED ? (CFG.sky === "day" ? "#ffffff" : mix(PAL.sky[0], "#9aa6d6", 0.4)) : CFG.sky === "night" ? "rgba(160,170,210,0.22)" : "rgba(255,255,255," + (0.6 + depth * 0.3) + ")";
+      ctx.beginPath(); for (const [dx, dy, r] of [[0, 0, 1], [0.9, 0.2, 0.8], [-0.9, 0.25, 0.75], [0.3, -0.4, 0.8], [1.6, 0.3, 0.55]]) { ctx.moveTo(x + dx * s + r * s, y + dy * s); ctx.arc(x + dx * s, y + dy * s, r * s, 0, TAU); }
       if (INKED) { ctx.lineWidth = 5; ctx.strokeStyle = PAL.ink; ctx.stroke(); }
       ctx.fill();
     }
   },
-  mountains(ctx, p, W, H) {
-    [[0.62, "#3e5a7a", 1], [0.72, "#2a3f58", 2]].forEach(([base, col, sp], li) => {
-      ctx.fillStyle = CFG.sky === "day" ? (li ? "#4d7a5a" : "#7ea6b8") : col;
-      ctx.beginPath(); ctx.moveTo(0, H);
-      for (let x = 0; x <= W; x += 8) { const u = x / W + p * sp; ctx.lineTo(x, H * base - (Math.sin(u * TAU * 2) * 0.5 + Math.sin(u * TAU * 5 + li) * 0.25 + 0.75) * H * 0.14); }
-      ctx.lineTo(W, H); ctx.closePath(); ctx.fill(); ink(ctx, 2);
+  mountains(ctx, p, W, H, S, cam, Lt) {
+    [[0.6, "#8fb0c8", 1, 3], [0.7, "#5c7f9a", 2, 5], [0.8, "#3a5670", 4, 7]].forEach(([base, col, laps, freq], li) => {
+      const P = W * 1.5, off = RUN ? p * laps * P : 0, far = CFG.sky === "day" ? col : mix("#1c2a44", "#3e5a7a", li / 2);
+      const edge = mix(far.startsWith("#") ? far : "#5c7f9a", PAL.sky[1], 0.45);
+      const g = ctx.createLinearGradient(0, H * (base - 0.2), 0, H);
+      g.addColorStop(0, far); g.addColorStop(1, mix("#0b1424", "#2b4058", 0.4));
+      const ridge = x => H * base - (Math.sin((x / P) * TAU * freq) * 0.5 + Math.sin((x / P) * TAU * (freq * 2 + 1) + li) * 0.22 + 0.9) * H * 0.13;
+      ctx.fillStyle = g;
+      tile(P, off + cam.x * W * (0.2 + li * 0.25), o => {
+        ctx.beginPath(); ctx.moveTo(o, H);
+        for (let x = 0; x <= P + 8; x += 8) ctx.lineTo(o + x, ridge(x));
+        ctx.lineTo(o + P + 8, H); ctx.closePath(); ctx.fill();
+        ctx.strokeStyle = "rgba(255,255,255," + (0.16 + li * 0.05) + ")"; ctx.lineWidth = 2; ctx.beginPath();
+        for (let x = 0; x <= P + 8; x += 8) (x ? ctx.lineTo(o + x, ridge(x)) : ctx.moveTo(o + x, ridge(x))); ctx.stroke();
+      });
+      if (INKED) { ctx.strokeStyle = PAL.ink; ctx.lineWidth = 2; ctx.beginPath(); for (let x = 0; x <= W; x += 8) (x ? ctx.lineTo(x, ridge(x + off)) : ctx.moveTo(x, ridge(x + off))); ctx.stroke(); }
+      const haze = ctx.createLinearGradient(0, H * (base - 0.16), 0, H * (base + 0.06));
+      haze.addColorStop(0, "rgba(255,255,255,0)"); haze.addColorStop(1, "rgba(255,255,255," + (0.16 - li * 0.04) + ")");
+      ctx.fillStyle = haze; ctx.fillRect(0, H * (base - 0.16), W, H * 0.22);
     });
   },
-  city(ctx, p, W, H, S) {
-    for (const b of S.blocks) {
-      ctx.fillStyle = CFG.sky === "day" ? "#5b6a80" : "#0a0d1c"; ctx.beginPath(); ctx.rect(b.x, H - b.h - H * 0.02, b.w, b.h + H * 0.02); ctx.fill(); ink(ctx, 2);
-      if (CFG.sky === "day") continue;
-      for (const [wx, wy, ph] of b.win) { ctx.fillStyle = "rgba(255,210,120," + (0.5 + 0.4 * Math.sin(p * TAU * 2 + ph)) + ")"; ctx.fillRect(b.x + wx, H - b.h + wy, 4, 6); }
-    }
+  city(ctx, p, W, H, S, cam, Lt) {
+    const night = CFG.sky !== "day", P = DATA.P;
+    DATA.city.forEach((layer, li) => {
+      const depth = [0.3, 0.6, 1][li], laps = [1, 2, 4][li], base = H * (RUN ? 0.84 : 0.86) - H * 0.0;
+      const body = night ? mix("#0a0d1c", "#26305a", 0.55 - li * 0.25) : mix("#5b6a80", "#a7b4c8", 0.7 - li * 0.3);
+      tile(P, (RUN ? p * laps * P : 0) - cam.x * W * depth * 0.5, o => {
+        for (const b of layer) {
+          const x = o + b.x, y = base - b.h;
+          ctx.fillStyle = body; ctx.fillRect(x, y, b.w, b.h + 2);
+          if (li === 2) { ctx.fillStyle = "rgba(0,0,0,0.25)"; ctx.fillRect(x + b.w * (Lt.dx > 0 ? 0.72 : 0), y, b.w * 0.28, b.h); }
+          if (INKED) { ctx.lineWidth = 2; ctx.strokeStyle = PAL.ink; ctx.strokeRect(x, y, b.w, b.h + 2); }
+          if (b.tank) { ctx.fillStyle = mix("#3b4258", "#000000", 0.2); ctx.fillRect(x + b.w * 0.2, y - b.tank, b.w * 0.34, b.tank); ctx.fillRect(x + b.w * 0.26, y - b.tank - 6, b.w * 0.22, 6); }
+          if (b.ant) { ctx.fillStyle = "#333b52"; ctx.fillRect(x + b.w * 0.5 - 1, y - b.ant, 2, b.ant); if (night) { ctx.fillStyle = "rgba(255,70,70," + (0.4 + 0.6 * Math.abs(Math.sin(p * TAU * 8 + b.x))) + ")"; ctx.beginPath(); ctx.arc(x + b.w * 0.5, y - b.ant, 2.2, 0, TAU); ctx.fill(); } }
+          for (const [wx, wy, ph, on] of b.win) {
+            if (night) { if (on) { ctx.fillStyle = "rgba(255," + (190 + ph * 30) + ",110," + (0.5 + 0.4 * Math.sin(p * TAU * 2 + ph * 6)) + ")"; ctx.fillRect(x + wx, y + wy, 4, 6); } }
+            else { ctx.fillStyle = "rgba(255,255,255," + (0.12 + 0.18 * Math.abs(Math.sin(p * TAU + ph * 6))) + ")"; ctx.fillRect(x + wx, y + wy, 4, 6); }
+          }
+        }
+      });
+      if (li < 2) { const g = ctx.createLinearGradient(0, base - H * 0.34, 0, base); g.addColorStop(0, "rgba(255,255,255,0)"); g.addColorStop(1, "rgba(" + (night ? "120,130,190" : "255,255,255") + "," + (0.16 - li * 0.06) + ")"); ctx.fillStyle = g; ctx.fillRect(0, base - H * 0.34, W, H * 0.34); }
+    });
   },
-  sea(ctx, p, W, H) {
+  ground(ctx, p, W, H, S, cam, Lt) {
+    const y0 = H * 0.84, night = CFG.sky !== "day";
+    const g = ctx.createLinearGradient(0, y0, 0, H); g.addColorStop(0, night ? "#1a2038" : "#6f7686"); g.addColorStop(1, night ? "#0a0d1c" : "#3c4252");
+    ctx.fillStyle = g; ctx.fillRect(0, y0, W, H - y0);
+    ctx.fillStyle = "rgba(255,255,255," + (night ? 0.14 : 0.3) + ")"; ctx.fillRect(0, y0, W, 2);
+    const P = W * 1.2; tile(P, p * P * 6, o => { for (let i = 0; i < 6; i++) ctx.fillRect(o + i * P / 6, y0 + (H - y0) * 0.45, P / 12, 4); });
+  },
+  character(ctx, p, W, H, S, cam, Lt, t, dur) {
+    const q = pose(t, W, H, dur), U = q.U, st = S || DATA.init;
+    const hi = Lt.color, body = STYLE === "pixel" ? PAL.accent2 : PAL.accent2, pants = mix("#22305a", "#0a1024", 0.2), skin = "#f0c39b", scarf = PAL.accent;
+    // long soft shadow, cast away from the light
+    const sh = ctx.createRadialGradient(q.cx - Lt.dx * U * 0.3, q.ground + U * 0.02, 1, q.cx - Lt.dx * U * 0.3, q.ground + U * 0.02, U * 0.55);
+    sh.addColorStop(0, Lt.shadow); sh.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.save(); ctx.translate(0, q.ground); ctx.scale(1, 0.14); ctx.translate(0, -q.ground); ctx.fillStyle = sh; ctx.fillRect(q.cx - U, q.ground - U, U * 2, U * 2); ctx.restore();
+    // back arm and back leg first
+    const legs = [0, 1].map(i => PHYS.ik2(q.cx, q.hipY, q.f[i].x, q.f[i].y, q.l1, q.l2, -1)), arms = [0, 1].map(i => PHYS.ik2(q.sx, q.sy, q.hand[i].x, q.hand[i].y, U * 0.19, U * 0.19, -1));
+    const leg = i => { limb(ctx, [[q.cx, q.hipY], [legs[i].x, legs[i].y], [legs[i].ex, legs[i].ey]], U * 0.085, pants, hi, Lt); ctx.fillStyle = "#1b1d24"; ctx.beginPath(); ctx.ellipse(legs[i].ex + U * 0.04, legs[i].ey + U * 0.005, U * 0.08, U * 0.036, 0, 0, TAU); ctx.fill(); ink(ctx, 2); };
+    const arm = i => limb(ctx, [[q.sx, q.sy], [arms[i].x, arms[i].y], [arms[i].ex, arms[i].ey]], U * 0.06, i ? skin : mix("#000000", body, 0.75), hi, Lt);
+    leg(1); arm(1);
+    // scarf tail streams from the physics chain
+    const chain = st.scarf;
+    ctx.lineCap = "round"; ctx.lineJoin = "round";
+    for (let i = chain.length - 1; i >= 1; i--) { const a = chain[i - 1], b = chain[i], w = U * (0.05 - 0.036 * (i / chain.length)); ctx.strokeStyle = i % 4 < 2 ? scarf : mix(scarf, "#000000", 0.18); ctx.lineWidth = w * 1.5; ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke(); }
+    // torso
+    limb(ctx, [[q.cx, q.hipY], [q.sx, q.sy]], U * 0.15, body, hi, Lt);
+    ctx.strokeStyle = scarf; ctx.lineWidth = U * 0.07; ctx.lineCap = "round"; ctx.beginPath(); ctx.moveTo(q.sx - U * 0.03, q.sy - U * 0.005); ctx.lineTo(q.sx + U * 0.06, q.sy - U * 0.02); ctx.stroke();
+    // head and hair
+    const hc = st.hair; ctx.strokeStyle = "#2a1a12"; ctx.lineCap = "round";
+    for (let i = hc.length - 1; i >= 1; i--) { ctx.lineWidth = q.r * (0.9 - 0.14 * i); ctx.beginPath(); ctx.moveTo(hc[i - 1].x, hc[i - 1].y); ctx.lineTo(hc[i].x, hc[i].y); ctx.stroke(); }
+    ctx.fillStyle = skin; ctx.beginPath(); ctx.arc(q.hx, q.hy, q.r, 0, TAU); ctx.fill(); ink(ctx, 2.5);
+    ctx.fillStyle = "#2a1a12"; ctx.beginPath(); ctx.arc(q.hx - q.r * 0.1, q.hy - q.r * 0.15, q.r * 1.02, Math.PI * 0.95, Math.PI * 1.85); ctx.fill();
+    ctx.fillStyle = "#111"; ctx.beginPath(); ctx.arc(q.hx + q.r * 0.42, q.hy - q.r * 0.05, q.r * 0.11, 0, TAU); ctx.fill();
+    ctx.fillStyle = "rgba(255,255,255,0.8)"; ctx.beginPath(); ctx.arc(q.hx + q.r * 0.45, q.hy - q.r * 0.09, q.r * 0.04, 0, TAU); ctx.fill();
+    leg(0); arm(0);
+  },
+  sea(ctx, p, W, H, S, cam, Lt) {
+    const lightX = has("moon") || CFG.sky === "night" ? W * 0.8 : CFG.sky === "sunset" ? W * 0.5 : W * 0.78;
     ["#1f6fa3", "#185b87", "#12486c"].forEach((col, i) => {
       const base = H * (0.68 + i * 0.08);
       ctx.fillStyle = col; ctx.beginPath(); ctx.moveTo(0, H);
       for (let x = 0; x <= W; x += 6) ctx.lineTo(x, base + Math.sin((x / W) * TAU * (2 + i) + p * TAU * (i % 2 ? -1 : 1)) * H * 0.018);
       ctx.lineTo(W, H); ctx.closePath(); ctx.fill(); ink(ctx, 2);
+      ctx.fillStyle = "rgba(255,255,255,0.5)";
+      for (let k = 0; k < 14; k++) { const x = wrap(hash(k + i * 20) + p * (i % 2 ? -1 : 1)) * W, y = base + Math.sin((x / W) * TAU * (2 + i) + p * TAU * (i % 2 ? -1 : 1)) * H * 0.018; ctx.fillRect(x, y - 1, 8 + hash(k) * 10, 2); }
     });
+    if (has("sun") || has("moon") || CFG.sky !== "day") {   // glitter path under the light source
+      ctx.globalCompositeOperation = "lighter";
+      for (let i = 0; i < 70; i++) { const y = H * (0.68 + hash(i) * 0.3), spread = (y - H * 0.66) * 0.5, x = lightX + (hash(i + 30) - 0.5) * spread * 2, a = Math.max(0, Math.sin(p * TAU * (2 + (i % 4)) + i * 3)); ctx.fillStyle = "rgba(255,240,200," + a * 0.5 + ")"; ctx.fillRect(x, y, 6 + hash(i + 3) * 10, 1.6); }
+      ctx.globalCompositeOperation = "source-over";
+    }
   },
   boat(ctx, p, W, H) {
     const x = wrap(p) * (W + 240) - 120, y = H * 0.69 + Math.sin(p * TAU * 3) * 5, tilt = Math.sin(p * TAU * 3 + 1) * 0.06;
     ctx.save(); ctx.translate(x, y); ctx.rotate(tilt);
     ctx.fillStyle = "#7a4a2a"; ctx.beginPath(); ctx.moveTo(-60, 0); ctx.lineTo(60, 0); ctx.lineTo(42, 22); ctx.lineTo(-42, 22); ctx.closePath(); ctx.fill(); ink(ctx);
     ctx.fillStyle = "#6b4a33"; ctx.fillRect(-3, -90, 6, 90);
-    ctx.fillStyle = "#f7f3e8"; ctx.beginPath(); ctx.moveTo(4, -86); ctx.lineTo(52, -12); ctx.lineTo(4, -12); ctx.closePath(); ctx.fill(); ink(ctx);
+    const flap = Math.sin(p * TAU * 6) * 4;
+    ctx.fillStyle = "#f7f3e8"; ctx.beginPath(); ctx.moveTo(4, -86); ctx.quadraticCurveTo(34 + flap, -50, 52, -12); ctx.lineTo(4, -12); ctx.closePath(); ctx.fill(); ink(ctx);
     ctx.restore();
   },
   planets(ctx, p, W, H) {
@@ -310,24 +424,28 @@ const L = {
   },
   rocket(ctx, p, W, H) {
     const u = ease.inOut(wrap(p)), x = W * 0.5 + Math.sin(p * TAU * 2) * 12, y = H * 1.15 - u * H * 1.5;
-    for (let i = 0; i < 26; i++) {
-      const q = wrap(hash(i) + p * 6), sx = x + (hash(i + 5) - 0.5) * 30 * q, sy = y + 60 + q * 140;
-      ctx.fillStyle = "rgba(200,200,210," + (0.4 * (1 - q)) + ")"; ctx.beginPath(); ctx.arc(sx, sy, 8 + q * 26, 0, TAU); ctx.fill();
+    for (let i = 0; i < 34; i++) {
+      const q = wrap(hash(i) + p * 6), sx = x + (hash(i + 5) - 0.5) * 34 * q, sy = y + 60 + q * 150;
+      ctx.fillStyle = "rgba(200,200,210," + (0.4 * (1 - q)) + ")"; ctx.beginPath(); ctx.arc(sx, sy, 8 + q * 28, 0, TAU); ctx.fill();
     }
     const fl = 26 + Math.sin(p * TAU * 20) * 8;
+    ctx.globalCompositeOperation = "lighter";
+    const fg = ctx.createRadialGradient(x, y + 50, 2, x, y + 50, 70 + fl); fg.addColorStop(0, "rgba(255,200,90,0.7)"); fg.addColorStop(1, "rgba(255,120,30,0)"); ctx.fillStyle = fg; ctx.fillRect(x - 120, y - 40, 240, 240);
+    ctx.globalCompositeOperation = "source-over";
     ctx.fillStyle = "#ffb703"; ctx.beginPath(); ctx.moveTo(x - 11, y + 36); ctx.quadraticCurveTo(x, y + 36 + fl * 2, x + 11, y + 36); ctx.fill();
     ctx.fillStyle = STYLE === "3d" ? "#dfe6ee" : "#f1f4f8"; ctx.beginPath(); ctx.moveTo(x, y - 60); ctx.quadraticCurveTo(x + 24, y - 30, x + 20, y + 36); ctx.lineTo(x - 20, y + 36); ctx.quadraticCurveTo(x - 24, y - 30, x, y - 60); ctx.fill(); ink(ctx);
     ctx.fillStyle = PAL.accent2; ctx.beginPath(); ctx.moveTo(x - 20, y + 10); ctx.lineTo(x - 36, y + 40); ctx.lineTo(x - 20, y + 36); ctx.fill(); ctx.beginPath(); ctx.moveTo(x + 20, y + 10); ctx.lineTo(x + 36, y + 40); ctx.lineTo(x + 20, y + 36); ctx.fill();
     ball(ctx, x, y - 14, 8, "#6fd3ff");
   },
   fish(ctx, p, W, H) {
-    for (let i = 0; i < 9; i++) {
+    for (let i = 0; i < 11; i++) {
       const dir = i % 2 ? 1 : -1, s = 12 + hash(i) * 16, x = wrap(hash(i + 2) + p * dir * (1 + (i % 3))) * (W + 120) - 60, y = H * (0.15 + hash(i + 9) * 0.6) + Math.sin(p * TAU * 2 + i) * 10;
       const wig = Math.sin(p * TAU * 12 + i) * 0.35;
       ctx.save(); ctx.translate(x, y); ctx.scale(dir, 1);
       ctx.fillStyle = "hsl(" + [20, 45, 190, 330, 280][i % 5] + ",85%,58%)";
       ctx.beginPath(); ctx.moveTo(-s * 0.8, 0); ctx.lineTo(-s * 1.6, -s * (0.55 + wig)); ctx.lineTo(-s * 1.6, s * (0.55 - wig)); ctx.closePath(); ctx.fill(); ink(ctx, 1.5);
       ctx.beginPath(); ctx.ellipse(0, 0, s, s * 0.55, 0, 0, TAU); ctx.fill(); ink(ctx, 1.5);
+      ctx.fillStyle = "rgba(255,255,255,0.3)"; ctx.beginPath(); ctx.ellipse(-s * 0.1, -s * 0.22, s * 0.55, s * 0.14, 0, 0, TAU); ctx.fill();
       ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(s * 0.5, -s * 0.12, s * 0.16, 0, TAU); ctx.fill();
       ctx.fillStyle = "#111"; ctx.beginPath(); ctx.arc(s * 0.55, -s * 0.12, s * 0.08, 0, TAU); ctx.fill();
       ctx.restore();
@@ -335,7 +453,7 @@ const L = {
   },
   bubbles(ctx, p, W, H) {
     ctx.strokeStyle = "rgba(255,255,255,0.6)"; ctx.lineWidth = 1.2;
-    for (let i = 0; i < 45; i++) { const y = H - wrap(hash(i) + p * (1 + (i % 3))) * (H + 20), x = hash(i + 3) * W + Math.sin(p * TAU * 4 + i) * 6; ctx.beginPath(); ctx.arc(x, y, 2 + hash(i + 8) * 5, 0, TAU); ctx.stroke(); }
+    for (let i = 0; i < 55; i++) { const y = H - wrap(hash(i) + p * (1 + (i % 3))) * (H + 20), x = hash(i + 3) * W + Math.sin(p * TAU * 4 + i) * 6; ctx.beginPath(); ctx.arc(x, y, 2 + hash(i + 8) * 5, 0, TAU); ctx.stroke(); }
   },
   birds(ctx, p, W, H) {
     ctx.strokeStyle = CFG.sky === "day" ? "#243042" : "#dfe6ff"; ctx.lineWidth = 2.2; ctx.lineCap = "round";
@@ -360,6 +478,7 @@ const L = {
     const x = W * 0.45, y = road - 8 + Math.sin(p * TAU * 16) * 1.5;
     ctx.fillStyle = PAL.accent2; ctx.beginPath(); ctx.moveTo(x - 90, y - 10); ctx.lineTo(x - 80, y - 38); ctx.lineTo(x - 40, y - 40); ctx.lineTo(x - 18, y - 66); ctx.lineTo(x + 40, y - 66); ctx.lineTo(x + 62, y - 40); ctx.lineTo(x + 92, y - 34); ctx.lineTo(x + 96, y - 10); ctx.closePath(); ctx.fill(); ink(ctx);
     ctx.fillStyle = "#bfe3ff"; ctx.beginPath(); ctx.moveTo(x - 10, y - 60); ctx.lineTo(x + 36, y - 60); ctx.lineTo(x + 52, y - 42); ctx.lineTo(x - 26, y - 42); ctx.closePath(); ctx.fill();
+    ctx.globalCompositeOperation = "lighter"; const hl = ctx.createLinearGradient(x + 92, y - 22, x + 300, y - 22); hl.addColorStop(0, "rgba(255,240,180,0.55)"); hl.addColorStop(1, "rgba(255,240,180,0)"); ctx.fillStyle = hl; ctx.beginPath(); ctx.moveTo(x + 92, y - 26); ctx.lineTo(x + 300, y - 60); ctx.lineTo(x + 300, y + 10); ctx.lineTo(x + 92, y - 16); ctx.fill(); ctx.globalCompositeOperation = "source-over";
     for (const wx of [x - 55, x + 60]) {
       ball(ctx, wx, y - 6, 18, "#1c1c1c");
       ctx.strokeStyle = "#bbb"; ctx.lineWidth = 3; const a = -p * TAU * 12;
@@ -370,11 +489,13 @@ const L = {
     const bx = W / 2, by = H * 0.82;
     ctx.fillStyle = "#5a3a22"; ctx.save(); ctx.translate(bx, by + 8); ctx.rotate(0.25); ctx.fillRect(-70, -8, 140, 16); ctx.rotate(-0.5); ctx.fillRect(-70, -8, 140, 16); ctx.restore();
     ctx.globalCompositeOperation = "lighter";
-    for (let i = 0; i < 110; i++) {
+    const glow = ctx.createRadialGradient(bx, by - 30, 4, bx, by - 30, H * 0.5); glow.addColorStop(0, "rgba(255,150,50," + (0.32 + 0.06 * Math.sin(p * TAU * 12)) + ")"); glow.addColorStop(1, "rgba(255,90,20,0)"); ctx.fillStyle = glow; ctx.fillRect(0, 0, W, H);
+    for (let i = 0; i < 130; i++) {
       const q = wrap(hash(i) + p * (2 + (i % 3))), x = bx + (hash(i + 9) - 0.5) * 70 * (1 - q) + Math.sin(q * 8 + i) * 12, y = by - q * H * 0.42, r = (1 - q) * 22 + 3;
       ctx.fillStyle = "hsla(" + (50 - q * 45) + ",100%," + (60 - q * 20) + "%," + (0.5 * (1 - q)) + ")";
       ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.fill();
     }
+    for (let i = 0; i < 26; i++) { const q = wrap(hash(i + 300) + p * (1 + (i % 2))), x = bx + (hash(i + 310) - 0.5) * 120 + Math.sin(q * 9 + i) * 26, y = by - q * H * 0.7; ctx.fillStyle = "rgba(255,190,90," + (1 - q) + ")"; ctx.fillRect(x, y, 2, 2); }
     ctx.globalCompositeOperation = "source-over";
   },
   leaves(ctx, p, W, H) {
@@ -386,11 +507,11 @@ const L = {
   },
   snow(ctx, p, W, H) {
     ctx.fillStyle = "rgba(255,255,255,0.9)";
-    for (let i = 0; i < 170; i++) { const y = wrap(hash(i) + p * (1 + (i % 2))) * (H + 10) - 5, x = hash(i + 4) * W + Math.sin(p * TAU * 2 + i) * 14; ctx.beginPath(); ctx.arc(x, y, 1 + hash(i + 2) * 2.6, 0, TAU); ctx.fill(); }
+    for (let i = 0; i < 190; i++) { const y = wrap(hash(i) + p * (1 + (i % 2))) * (H + 10) - 5, x = hash(i + 4) * W + Math.sin(p * TAU * 2 + i) * 14; ctx.beginPath(); ctx.arc(x, y, 1 + hash(i + 2) * 2.6, 0, TAU); ctx.fill(); }
   },
   rain(ctx, p, W, H) {
     ctx.strokeStyle = "rgba(190,210,255,0.55)"; ctx.lineWidth = 1.3;
-    for (let i = 0; i < 240; i++) { const y = wrap(hash(i) + p * (3 + (i % 3))) * (H + 40) - 20, x = hash(i + 3) * (W + 60); ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x - 6, y + 18); ctx.stroke(); }
+    for (let i = 0; i < 260; i++) { const y = wrap(hash(i) + p * (3 + (i % 3))) * (H + 40) - 20, x = hash(i + 3) * (W + 60); ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x - 6, y + 18); ctx.stroke(); }
   },
   lightning(ctx, p, W, H) {
     for (const at of [0.28, 0.71]) {
@@ -404,7 +525,7 @@ const L = {
     }
   },
   confetti(ctx, p, W, H) {
-    for (let i = 0; i < 160; i++) {
+    for (let i = 0; i < 170; i++) {
       const y = wrap(hash(i) + p * (1 + (i % 3))) * (H + 30) - 15, x = hash(i + 7) * W + Math.sin(p * TAU * 3 + i) * 20, rot = p * TAU * 4 + i;
       ctx.save(); ctx.translate(x, y); ctx.rotate(rot); ctx.scale(1, Math.cos(rot * 1.3));
       ctx.fillStyle = "hsl(" + Math.floor(hash(i + 1) * 360) + ",90%,60%)"; ctx.fillRect(-5, -3, 10, 6); ctx.restore();
@@ -419,7 +540,7 @@ const L = {
   neongrid(ctx, p, W, H) {
     const hz = H * 0.58;
     const sunG = ctx.createLinearGradient(0, hz - H * 0.3, 0, hz); sunG.addColorStop(0, "#ffd166"); sunG.addColorStop(1, "#ff3d8b");
-    ctx.fillStyle = sunG; ctx.beginPath(); ctx.arc(W / 2, hz, H * 0.22, PI_(), 0); ctx.fill();
+    ctx.fillStyle = sunG; ctx.beginPath(); ctx.arc(W / 2, hz, H * 0.22, Math.PI, 0); ctx.fill();
     ctx.fillStyle = PAL.sky[1]; for (let i = 0; i < 5; i++) ctx.fillRect(0, hz - H * 0.02 - i * H * 0.035, W, 3 + i);
     ctx.fillStyle = "#0b0520"; ctx.fillRect(0, hz, W, H - hz);
     ctx.strokeStyle = "#ff3df2"; ctx.lineWidth = 1.5; ctx.shadowColor = "#ff3df2"; ctx.shadowBlur = 10;
@@ -429,10 +550,20 @@ const L = {
   },
   abstract(ctx, p, W, H) {
     ctx.globalCompositeOperation = "lighter";
-    for (let i = 0; i < 7; i++) {
+    for (let i = 0; i < 8; i++) {
       const a = p * TAU * (i % 2 ? 1 : -1) + i, x = W / 2 + Math.cos(a) * W * 0.22 * (0.5 + hash(i)), y = H / 2 + Math.sin(a * 2) * H * 0.2, r = Math.min(W, H) * (0.12 + hash(i + 3) * 0.12);
       const g = ctx.createRadialGradient(x, y, 0, x, y, r); g.addColorStop(0, "hsla(" + (i * 50 + p * 360) + ",90%,60%,0.7)"); g.addColorStop(1, "rgba(0,0,0,0)");
       ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.fill();
+    }
+    ctx.globalCompositeOperation = "source-over";
+  },
+  motes(ctx, p, W, H, S, cam, Lt) {   // floating dust lit by the light, drifting with the camera
+    ctx.globalCompositeOperation = "lighter";
+    for (let i = 0; i < 46; i++) {
+      const depth = 0.3 + hash(i + 70) * 0.9, x = ((hash(i) * W + Math.sin(p * TAU + i) * 14 * depth + cam.x * W * depth * 0.6) % W + W) % W, y = ((hash(i + 20) * H - p * H * 0.12 * depth * (1 + (i % 2))) % H + H) % H;
+      const r = 1 + depth * 2.2, tw = 0.35 + 0.65 * Math.abs(Math.sin(p * TAU * (1 + (i % 4)) + i));
+      const g = ctx.createRadialGradient(x, y, 0, x, y, r * 3); g.addColorStop(0, "rgba(255,240,210," + 0.35 * tw + ")"); g.addColorStop(1, "rgba(255,240,210,0)");
+      ctx.fillStyle = g; ctx.fillRect(x - r * 3, y - r * 3, r * 6, r * 6);
     }
     ctx.globalCompositeOperation = "source-over";
   },
@@ -451,35 +582,49 @@ const L = {
     }
   }
 };
-function PI_() { return Math.PI; }
-const ORDER = ["sky", "stars", "sun", "moon", "neongrid", "clouds", "mountains", "city", "sea", "boat", "planets", "abstract", "rocket", "fish", "bubbles", "car", "fire", "balls", "birds", "leaves", "snow", "rain", "lightning", "confetti", "hearts", "text"];
+const ORDER = ["sky", "stars", "sun", "moon", "neongrid", "clouds", "mountains", "city", "sea", "boat", "planets", "abstract", "rocket", "fish", "bubbles", "ground", "car", "fire", "balls", "birds", "character", "leaves", "snow", "rain", "lightning", "confetti", "hearts", "motes", "text"];
 function setup(W, H) {
-  const blocks = []; let x = 0, i = 0;
-  while (x < W + 60) {
-    const w = 36 + hash(i * 3.3) * 50, h = H * (0.14 + hash(i * 5.1) * 0.32), win = [];
-    for (let wy = 12; wy < h - 10; wy += 15) for (let wx = 7; wx < w - 9; wx += 11) if (hash(i * 17 + wx * 1.3 + wy * 0.7) < 0.4) win.push([wx, wy, hash(wx * wy + i) * TAU]);
-    blocks.push({ x, w, h, win }); x += w + 4; i++;
-  }
-  return { blocks };
+  const P = W * 1.6, mkLayer = (n, minH, maxH, seedOff) => {
+    const out = []; let x = 0, i = 0, widths = [];
+    while (x < P) { const w = 30 + hash(i * 3.3 + seedOff) * 54; widths.push(w); x += w; i++; }
+    const k = P / x; x = 0;
+    widths.forEach((w0, j) => {
+      const w = w0 * k, h = H * (minH + hash(j * 5.1 + seedOff) * (maxH - minH)), win = [];
+      for (let wy = 12; wy < h - 10; wy += 15) for (let wx = 7; wx < w - 9; wx += 11) win.push([wx, wy, hash(j * 17 + wx * 1.3 + wy * 0.7 + seedOff), hash(j * 3 + wx * 7.7 + wy * 1.9 + seedOff) < 0.42]);
+      out.push({ x, w, h, win, tank: hash(j + seedOff * 2) < 0.22 ? 14 + hash(j) * 14 : 0, ant: hash(j + seedOff * 3) < 0.18 ? 18 + hash(j + 4) * 26 : 0 });
+      x += w;
+    });
+    return out;
+  };
+  DATA = { P, city: [mkLayer(0, 0.16, 0.34, 1), mkLayer(1, 0.14, 0.3, 5), mkLayer(2, 0.09, 0.26, 9)] };
+  const q = has("character") ? pose(0, W, H, 6) : { nx: 0, ny: 0, bx: 0, by: 0, U: 100 };
+  const st = { scarf: PHYS.makeChain(16, q.nx, q.ny, q.U * 0.085), hair: PHYS.makeChain(5, q.bx, q.by, q.U * 0.05) };
+  DATA.init = st;
+  return st;
 }
 function draw(ctx, t, info) {
-  const { W, H, duration, state } = info;
-  let p = info.progress;
+  const { W, H, duration, state } = info, Lt = info.light, cam = info.camera;
+  let p = info.progress, tt = t;
   if (STYLE === "frames") {
     const drawings = Math.max(1, Math.round(duration * 8)), d = Math.floor(p * drawings);
-    p = d / drawings;
+    p = d / drawings; tt = p * duration;
     ctx.translate((hash(d) - 0.5) * 3, (hash(d + 50) - 0.5) * 3);
   }
-  const needsGround = (has("fire") || has("balls")) && !has("sea") && !has("city") && CFG.sky !== "underwater" && CFG.sky !== "space";
   for (const name of ORDER) {
-    if (name !== "sky" && !has(name)) continue;
-    if (name === "car" || name === "fire" || name === "balls") {
-      if (needsGround && !draw.groundDone) { ctx.fillStyle = PAL.ground; ctx.fillRect(0, H * 0.84, W, H * 0.16); draw.groundDone = true; }
-    }
-    ctx.save(); L[name](ctx, p, W, H, state); ctx.restore();
+    if (name !== "sky" && !has(name) && !(name === "ground" && RUN) && !(name === "motes" && CFG.sky !== "underwater")) continue;
+    ctx.save(); L[name](ctx, p, W, H, state, cam, Lt, tt, duration); ctx.restore();
   }
-  draw.groundDone = false;
+  const needsGround = (has("fire") || has("balls")) && !has("sea") && !has("city") && CFG.sky !== "underwater" && CFG.sky !== "space";
+  if (needsGround) { ctx.fillStyle = PAL.ground; ctx.fillRect(0, H * 0.84, W, H * 0.16); }
   if (CFG.sky === "underwater") { ctx.fillStyle = PAL.ground; ctx.beginPath(); ctx.moveTo(0, H); for (let x = 0; x <= W; x += 20) ctx.lineTo(x, H * 0.93 - Math.sin(x * 0.02) * 8); ctx.lineTo(W, H); ctx.fill(); }
   if (STYLE === "frames") { ctx.fillStyle = "rgba(245,235,215,0.12)"; ctx.fillRect(-10, -10, W + 20, H + 20); }
 }
 }
+
+// Built-in examples that use the mock generator's engine, so they show camera, light and physics together.
+PTM_EXAMPLES.push({ id: "ex-runner", title: "Rooftop runner", note: "A runner sprints past a skyline at golden hour. The scarf and hair are simulated physics.",
+  prompt: "A runner sprinting across city rooftops at sunset with a flowing scarf", params: { style: "3d", duration: 6, aspect: "16:9", fps: 30, camera: "handheld", camK: 1, light: "golden", blur: 2, detail: "high", physics: true },
+  code: PTM_mock("A runner sprinting across city rooftops at sunset with a flowing scarf", "3d").code, engine: "example" });
+PTM_EXAMPLES.push({ id: "ex-neon-storm", title: "Neon storm over the city", note: "Rain, lightning and a synthwave skyline, with a slow orbit camera.",
+  prompt: "Neon rain and lightning over a cyberpunk city at night", params: { style: "anime", duration: 6, aspect: "16:9", fps: 30, camera: "orbit", camK: 1, light: "neon", blur: 1, detail: "high", physics: false },
+  code: PTM_mock("Neon rain and lightning over a cyberpunk city at night with a storm", "anime").code, engine: "example" });

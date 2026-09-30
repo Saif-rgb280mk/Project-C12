@@ -26,10 +26,13 @@ Generating new animations uses Claude, so it works when the page is opened as an
 
 # PromptToMotion
 
-`prompttomotion/`: a text-to-animation generator. Type a description, pick a style (2D Vector, 3D Render, Anime, Pixel Art, Frame-by-Frame), set duration, aspect ratio (16:9, 9:16, 1:1) and FPS, then play, scrub, loop and download as MP4, GIF or Lottie. Past creations are kept in a history gallery so you can reopen and edit them.
+`prompttomotion/`: a text-to-animation generator with a fully animated interface. Type a description, pick a style (2D Vector, 3D Render, Anime, Pixel Art, Frame-by-Frame), set duration, aspect ratio (16:9, 9:16, 1:1) and FPS (up to 60), then direct it like a film: **camera moves** (push, pull, pan, orbit, crane, handheld), **lighting looks** (natural sunlight, cinematic, neon glow, golden hour, moonlit, studio), **motion blur**, **scene detail** and **fluid character physics**. Play, scrub, loop and download as MP4, GIF or Lottie. Past creations are kept in a history gallery so you can reopen and edit them.
+
+The site itself is animated: a particle entrance with a logo reveal, an interactive particle-mesh hero, typing example prompts, glowing buttons, animated gradient borders and a loading orb that opens into your finished animation.
 
 - Open `prompttomotion/index.html` in a browser. **Mock (offline)** mode builds a scene from keywords in your prompt, so the whole app works without any AI. Published as an artifact on claude.ai it can also use **Claude AI** to write a new scene for each prompt.
-- Tech stack, prompt handling and mock testing are explained in [`prompttomotion/docs/ARCHITECTURE.md`](prompttomotion/docs/ARCHITECTURE.md).
+- Tech stack, prompt handling, the detail engine and mock testing: [`prompttomotion/docs/ARCHITECTURE.md`](prompttomotion/docs/ARCHITECTURE.md).
+- The animated UI, loading states and prompt-to-preview transition (with a React and Framer Motion version): [`prompttomotion/docs/ANIMATED_UI.md`](prompttomotion/docs/ANIMATED_UI.md).
 - `python3 prompttomotion/build.py` bundles everything into one HTML file.
 
 `stair-tumble/index.html` is a 3D animation of a character falling down three flights of stairs and getting back up.

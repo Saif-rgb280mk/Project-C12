@@ -1,0 +1,123 @@
+# The animated website: how it works
+
+Everything that moves on the page (not inside the animation itself) lives in `js/fx.js` and `css/app.css`. The app logic in `js/app.js` only asks for effects through `window.PTM_FX`, so you can restyle the motion without touching generation.
+
+## Libraries
+
+- **Tailwind CSS** for layout and spacing. Colours are CSS variables (`css/app.css`) mapped into Tailwind by `js/tailwind.config.js`, so light and dark themes are one file.
+- **Motion** (`motion@11`, the vanilla engine from the Framer Motion team, loaded from jsDelivr) for element animation.
+- **No hard dependency on Motion.** `play()` in `fx.js` calls `Motion.animate` when it exists and falls back to the Web Animations API when it doesn't, with the same keyframe format. Both paths are tested.
+- **Canvas 2D** for the particle backgrounds and the loading orb.
+- Everything respects `prefers-reduced-motion`: the entrance is skipped, infinite CSS animations stop, and canvases draw one still frame.
+
+## One call for every animation
+
+```js
+// keyframes are [from, to] (or more); x, y are px; filter and clipPath are strings
+PTM_FX.play(el, { opacity: [0, 1], y: [30, 0], filter: ["blur(12px)", "blur(0px)"] }, { duration: 0.8, delay: 0.1, ease: "out" });
+PTM_FX.stagger(elements, keyframes, { step: 0.07 });
+```
+
+`play()` holds the first frame during the delay (so nothing flashes), then clears its inline styles when finished unless you pass `keep: true`.
+
+## Entrance (the first 2 seconds)
+
+1. `#intro` is a full-screen dark overlay that is in the HTML from the first paint, so the page never flashes unstyled.
+2. `runIntro()` in `fx.js` draws 170 glowing particles on `#introCanvas`. They spiral in from the edges and settle into a ring while the SVG logo draws itself with CSS `stroke-dashoffset` (the shapes use `pathLength="1"`), the three words of the name fade and blur in, and a progress bar counts to 100%.
+3. At 1.85 s the particles burst outward, an **iris** (`clip-path: circle(150%)` to `circle(0%)`) closes over the overlay, and `heroEntrance()` starts: the headline letters (split into spans by `splitHeadline()`) rise in with a blur and a stagger, then each `[data-anim]` block follows.
+4. Click, Enter, Space, Escape or the Skip button jump to the reveal. Failsafes: a CSS-only rule removes the overlay after 7 s if scripts fail, and hero content shows itself after 7.5 s.
+
+## Interactive hero
+
+- `heroMesh()` fills `#heroCanvas` with 36 to 120 drifting particles (scaled to the area), links any two within 130 px, and draws a perspective wave-grid floor. The pointer attracts nearby particles and draws lines to them; a click or tap sends out a ring pulse. It pauses when off screen or when the tab is hidden.
+- The hero preview card tilts in 3D toward the pointer (`.tilt`), has an animated conic-gradient border (`.gborder`, an `@property --ang` angle that rotates), and floating chips that bob and shift at different depths as the pointer moves (`data-depth`).
+- The headline's second line has a colour shimmer that runs through each letter with a per-letter delay.
+
+## Micro-interactions
+
+| Effect | Where | How |
+|---|---|---|
+| Typing effect on example prompts | Hero input and studio prompt | `typer()` types, holds, erases and moves to the next idea in an overlay span with a blinking caret. It hides on focus or when there is text. Press the right arrow key in the empty box to use the idea. |
+| Glowing buttons | Every `.btn` | A pointer listener sets `--mx` and `--my`; a `::after` radial gradient follows the cursor. Primary buttons also have a moving sheen and a glow on hover. |
+| Animated gradient borders | Hero card, both prompt boxes | `.gborder`: conic gradient on the border box, angle animated with `@property`. Focus adds a glow ring. |
+| Spotlight cards | Feature and step cards | `.glow-el` shows a soft radial highlight under the pointer. |
+| Live demos | "Direct it like a film" cards | Pure CSS: an orbiting camera dot on an ellipse (`offset-path`), a sweeping light beam, motion-blur echoes, swinging pendulums. |
+| Scroll reveals | Sections and cards | `setupReveal()` uses an `IntersectionObserver`; each `.rv` element rises in with a stagger by its position among siblings. |
+| Sticky header | Top | Blurs and gains a border after 8 px of scroll; nav links underline on hover. |
+| Loading spinners | Generate button, overlay, gallery | A spinner inside the button while working, a two-colour ring in the overlay, shimmer skeletons for thumbnails. |
+
+## The preview canvas: from prompt to finished animation
+
+This is the sequence `startJob()` and `job.end()` in `app.js` run around every generation. The monitor has three layers: the **preview iframe** (the player), the **busy overlay** (`#busy`) and the border glow.
+
+**Loading state** (`startJob`)
+
+1. The monitor gets `.making`, which pulses a glowing outline.
+2. The overlay fades in and scales from 1.04 to 1. The old preview behind it blurs to 10 px and grows 5% (`keep: true`, so it stays that way underneath).
+3. `orb.start()` runs the particle orb on `#orbCanvas`: 110 glowing particles orbiting on tilted ellipses around a pulsing core.
+4. The user's prompt is typed into the overlay (`typeInto`) so they see their words become the orb's caption.
+5. The step list advances (each step's dot goes from hollow to pulsing to solid green) and a gradient progress bar follows. For Claude the detail line counts lines written as the answer streams in.
+6. The Generate button shows its spinner and the label "Making your animation…". Stop aborts the job.
+
+**Reveal** (`job.end(true)`)
+
+1. `orb.burst()` throws the particles outward and fades them.
+2. The new iframe was loaded underneath during generation. It now animates from `blur(16px) scale(1.09) opacity .15` to sharp (1 s).
+3. At the same moment the overlay's `clip-path` closes as an **iris** from `circle(150%)` to `circle(0%)` (0.9 s), revealing the sharp preview as the circle shrinks.
+4. The overlay is hidden and the orb loop stops (no idle CPU).
+
+If generation fails or is stopped, the overlay just fades out and the old preview un-blurs, so the user is never left on a blank stage.
+
+Camera, lighting and blur changes need no loading state: they go straight to the running player as a `config` message and show on the next frame.
+
+## The same transition in React with Framer Motion
+
+The prototype uses vanilla JS so it runs from a single HTML file. If you move to React, this is the equivalent stage. (This snippet is a reference and is not run in this repo.)
+
+```jsx
+import { AnimatePresence, motion } from "framer-motion";
+
+export function PreviewStage({ status, prompt, src, steps }) {
+  return (
+    <div className="relative aspect-video overflow-hidden rounded-2xl bg-black">
+      <AnimatePresence mode="wait">
+        {status === "ready" && (
+          <motion.video
+            key={src} src={src} autoPlay loop muted playsInline
+            className="absolute inset-0 h-full w-full object-cover"
+            initial={{ opacity: 0.15, scale: 1.09, filter: "blur(16px)" }}
+            animate={{ opacity: 1, scale: 1, filter: "blur(0px)" }}
+            transition={{ duration: 1, ease: [0.22, 1, 0.36, 1] }}
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {status === "generating" && (
+          <motion.div
+            key="loading"
+            className="absolute inset-0 grid place-items-center bg-black/85 text-white"
+            style={{ clipPath: "circle(150% at 50% 50%)" }}
+            initial={{ opacity: 0, scale: 1.04 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ clipPath: "circle(0% at 50% 50%)", transition: { duration: 0.9, ease: [0.65, 0, 0.35, 1] } }}
+          >
+            <OrbCanvas />                       {/* the particle orb, a canvas in a ref */}
+            <TypedPrompt text={prompt} />        {/* types one character at a time */}
+            <StepList steps={steps} />           {/* dots go hollow, pulsing, solid */}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+```
+
+`AnimatePresence` keeps the loading layer mounted while its `exit` iris plays, and the `key` on the video makes each new animation animate in from blur.
+
+## Performance notes
+
+- Only one `requestAnimationFrame` loop runs per visible canvas; the hero mesh pauses off screen and in hidden tabs, the orb only runs while a job is active.
+- Particle glow uses pre-rendered sprites (one small canvas per colour) instead of per-frame gradients or `shadowBlur`.
+- Pointer effects use CSS variables and `transform`/`translate`, so they don't trigger layout.
+- The preview canvas caps its internal resolution at about 1280 px on the long side and lowers motion-blur sub-frames if frames take too long.

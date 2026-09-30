@@ -29,7 +29,7 @@ def main():
         html = html.replace('<script src="js/tailwind.config.js"></script>', inline_js("tailwind.config.js"))
     if a.no_fonts:
         html = re.sub(r'<link rel="(?:stylesheet|preconnect)" href="https://fonts[^>]*>\n?', "", html)
-    for name in ("runtime.js", "scenes.js", "app.js"):
+    for name in ("fx.js", "runtime.js", "scenes.js", "app.js"):
         html = html.replace('<script src="js/%s"></script>' % name, inline_js(name))
     if a.full_document:
         html = '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"></head><body>' + html + "</body></html>"

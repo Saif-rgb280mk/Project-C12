@@ -12,6 +12,13 @@
   // ------------------------------------------------------------------ options
   const ASPECTS = { "16:9": [960, 540], "9:16": [540, 960], "1:1": [720, 720] };
   const FPS_OPTIONS = [12, 24, 30, 60];
+  const CAMERAS = [["static", "Static"], ["push", "Push in"], ["pull", "Pull out"], ["panl", "Pan left"], ["panr", "Pan right"], ["orbit", "Orbit"], ["crane", "Crane"], ["handheld", "Handheld"]];
+  const LIGHTS = [["natural", "Natural sunlight", "#fff1d6,#8fb6e8"], ["cinematic", "Cinematic", "#ffb066,#2b6f8f"], ["neon", "Neon glow", "#ff3df2,#22d3ee"], ["golden", "Golden hour", "#ffb45a,#ff6a3a"], ["moonlit", "Moonlit", "#a9c1ff,#3b4a8f"], ["studio", "Studio soft", "#ffffff,#c9d3ea"], ["none", "As drawn", "#7a7f90,#3a3f50"]];
+  const BLURS = ["Off", "Light", "Medium", "Heavy"];
+  const DETAILS = [["standard", "Standard"], ["high", "High"], ["ultra", "Ultra"]];
+  const CAM_NAME = Object.fromEntries(CAMERAS), LIGHT_NAME = Object.fromEntries(LIGHTS.map(l => [l[0], l[1]]));
+  const DEFAULT_LOOK = { camera: "static", camK: 1, light: "natural", blur: 1, detail: "high", physics: true };
+  const normParams = p => Object.assign({}, DEFAULT_LOOK, p);
   const STYLES = [
     { id: "vector", name: "2D Vector", hint: "Flat shapes and bold colour" },
     { id: "3d", name: "3D Render", hint: "Depth, light and shadow" },
@@ -44,20 +51,20 @@
     return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>html,body{margin:0;height:100%;overflow:hidden;background:#000}#view{display:block;width:100%;height:100%;object-fit:contain}</style></head><body><canvas id="view"></canvas>
 <script>(${escScript(PTM_runtime.toString())})(${escScript(JSON.stringify(cfg))});</script>
 <script>${escScript(code)}</script>
-<script>PTM_start(typeof draw==="function"?draw:null,typeof setup==="function"?setup:null);</script></body></html>`;
+<script>PTM_start(typeof draw==="function"?draw:null,typeof setup==="function"?setup:null,typeof simulate==="function"?simulate:null);</script></body></html>`;
   }
 
   class Player {
     constructor(host, opts = {}) {
       this.host = host; this.frame = null; this.sid = 0; this.loop = opts.loop !== false;
-      this.onTime = opts.onTime || (() => {}); this.onError = opts.onError || (() => {}); this.onEnded = opts.onEnded || (() => {});
+      this.onTime = opts.onTime || (() => {}); this.onError = opts.onError || (() => {}); this.onEnded = opts.onEnded || (() => {}); this.onPerf = opts.onPerf || (() => {});
       this.pending = null; this.thumbWait = null; this.exportWait = null; this.last = null;
       players.add(this);
     }
     load(take, { autoplay = true } = {}) {
       const p = take.params, [W, H] = ASPECTS[p.aspect];
       this.sid = ++SID; this.last = null;
-      const cfg = { sid: this.sid, W, H, fps: p.fps, duration: p.duration, pixel: p.style === "pixel" ? 4 : 1, loop: this.loop, autoplay, title: take.title };
+      const cfg = { sid: this.sid, W, H, fps: p.fps, duration: p.duration, pixel: p.style === "pixel" ? 4 : 1, camera: p.camera || "static", camK: p.camK == null ? 1 : p.camK, light: p.light || "none", blur: p.blur || 0, loop: this.loop, autoplay, title: take.title };
       const f = document.createElement("iframe");
       f.setAttribute("sandbox", "allow-scripts");
       f.title = "Animation preview";
@@ -95,6 +102,7 @@
           break;
         case "time": this.last = m; this.onTime(m); break;
         case "ended": this.onEnded(); break;
+        case "perf": this.onPerf(m.subs); break;
         case "thumb": if (this.thumbWait) { this.thumbWait(m.url); this.thumbWait = null; } break;
         case "export-progress": if (this.exportWait && this.exportWait.onProgress) this.exportWait.onProgress(m.p, m.label); break;
         case "export-done": if (this.exportWait) { this.exportWait.resolve(m); this.exportWait = null; } break;
@@ -119,12 +127,13 @@
   const bringIntoView = (el, block = "center") => { const r = el.getBoundingClientRect(); if (r.top < 70 || r.bottom > innerHeight) el.scrollIntoView({ behavior: reduceMotion() ? "auto" : "smooth", block }); };
   const bytes = n => (n > 1048576 ? (n / 1048576).toFixed(1) + " MB" : Math.max(1, Math.round(n / 1024)) + " KB");
   const metaLine = t => t.params.aspect + " · " + t.params.duration + " s · " + t.params.fps + " fps · " + STYLE_NAME[t.params.style];
+  const lookLine = t => { const p = normParams(t.params); return [LIGHT_NAME[p.light], p.camera === "static" ? "Static camera" : CAM_NAME[p.camera] + " camera", p.blur ? BLURS[p.blur] + " blur" : "No blur"].join(" · "); };
 
   // ------------------------------------------------------------------ state
   let cur = null;                       // the take shown in the viewer (its params are the live settings)
   let engine = "mock", busy = null, repairs = 0, tab = "mine";
   let history = [];
-  try { history = JSON.parse(localStorage.getItem(HISTORY_KEY) || "[]").filter(t => t && t.code && t.params); } catch { history = []; }
+  try { history = JSON.parse(localStorage.getItem(HISTORY_KEY) || "[]").filter(t => t && t.code && t.params).map(t => Object.assign(t, { params: normParams(t.params) })); } catch { history = []; }
   const saveHistory = () => {
     for (let n = history.length; n >= 0; n--) {
       try { localStorage.setItem(HISTORY_KEY, JSON.stringify(history.slice(0, n))); return; } catch { /* quota: keep fewer */ }
@@ -172,10 +181,21 @@
     for (const a of Object.keys(ASPECTS)) { const b = mk("button", "", a); b.type = "button"; b.setAttribute("role", "radio"); b.dataset.aspect = a; b.onclick = () => setParam("aspect", a); asp.append(b); }
     const fps = $("#fpsSeg"); fps.innerHTML = "";
     for (const f of FPS_OPTIONS) { const b = mk("button", "", f + " fps"); b.type = "button"; b.setAttribute("role", "radio"); b.dataset.fps = f; b.onclick = () => setParam("fps", f); fps.append(b); }
+    const cam = $("#cameraGrid"); cam.innerHTML = "";
+    for (const [id, name] of CAMERAS) { const b = mk("button", "pill", name); b.type = "button"; b.setAttribute("role", "radio"); b.dataset.camera = id; b.onclick = () => setParam("camera", id); cam.append(b); }
+    const lg = $("#lightGrid"); lg.innerHTML = "";
+    for (const [id, name, cols] of LIGHTS) {
+      const b = mk("button", "light-card"); b.type = "button"; b.setAttribute("role", "radio"); b.dataset.light = id; b.style.setProperty("--lg", "linear-gradient(135deg," + cols.split(",")[0] + "," + cols.split(",")[1] + ")");
+      b.append(mk("i"), mk("span", "", name)); b.onclick = () => setParam("light", id); lg.append(b);
+    }
+    const bl = $("#blurSeg"); bl.innerHTML = "";
+    BLURS.forEach((n, i) => { const b = mk("button", "", n); b.type = "button"; b.setAttribute("role", "radio"); b.dataset.blur = i; b.onclick = () => setParam("blur", i); bl.append(b); });
+    const dt = $("#detailSeg"); dt.innerHTML = "";
+    for (const [id, n] of DETAILS) { const b = mk("button", "", n); b.type = "button"; b.setAttribute("role", "radio"); b.dataset.detail = id; b.onclick = () => setParam("detail", id); dt.append(b); }
     const ideas = $("#ideas"); ideas.innerHTML = "";
-    for (const t of IDEAS.slice(0, 4)) { const b = mk("button", "pill", t); b.type = "button"; b.onclick = () => { $("#prompt").value = t; $("#prompt").focus(); }; ideas.append(b); }
+    for (const t of IDEAS.slice(0, 4)) { const b = mk("button", "pill", t); b.type = "button"; b.onclick = () => { setVal($("#prompt"), t); $("#prompt").focus(); }; ideas.append(b); }
     const hi = $("#heroIdeas"); hi.innerHTML = "";
-    for (const t of IDEAS.slice(0, 3)) { const b = mk("button", "pill", t); b.type = "button"; b.onclick = () => { $("#heroPrompt").value = t; }; hi.append(b); }
+    for (const t of IDEAS.slice(0, 3)) { const b = mk("button", "pill", t); b.type = "button"; b.onclick = () => { setVal($("#heroPrompt"), t); }; hi.append(b); }
     const ls = $("#landingStyles"); ls.innerHTML = "";
     for (const s of STYLES) {
       const d = mk("div", "grid gap-2 rounded-2xl border border-line bg-panel p-3"), cv = mk("canvas"); drawStyleSample(cv, s.id);
@@ -190,8 +210,14 @@
     document.querySelectorAll("#aspectSeg button").forEach(b => b.setAttribute("aria-checked", b.dataset.aspect === p.aspect));
     document.querySelectorAll("#fpsSeg button").forEach(b => b.setAttribute("aria-checked", +b.dataset.fps === p.fps));
     $("#duration").value = p.duration; $("#durationOut").textContent = p.duration + " s";
+    document.querySelectorAll("#cameraGrid button").forEach(b => b.setAttribute("aria-checked", b.dataset.camera === p.camera));
+    document.querySelectorAll("#lightGrid button").forEach(b => b.setAttribute("aria-checked", b.dataset.light === p.light));
+    document.querySelectorAll("#blurSeg button").forEach(b => b.setAttribute("aria-checked", +b.dataset.blur === p.blur));
+    document.querySelectorAll("#detailSeg button").forEach(b => b.setAttribute("aria-checked", b.dataset.detail === p.detail));
+    $("#camK").value = p.camK; $("#camKOut").textContent = Number(p.camK).toFixed(1) + "×"; $("#camK").disabled = p.camera === "static";
+    $("#physics").checked = !!p.physics;
     $("#takeTitle").textContent = cur.title;
-    $("#takeMeta").textContent = metaLine(cur);
+    $("#takeMeta").textContent = metaLine(cur) + " · " + lookLine(cur);
     $("#code").textContent = cur.code.trim();
     $("#loopBtn").textContent = "Loop: " + (player.loop ? "on" : "off");
     $("#loopBtn").setAttribute("aria-pressed", player.loop);
@@ -208,8 +234,13 @@
       if (cur.engine === "mock") { const m = PTM_mock(cur.prompt.split(" → ")[0], value); cur.code = m.code; cur.note = m.note; }
       $("#styleNote").textContent = cur.engine === "mock" ? "" : "This animation keeps its look. Pick Generate to redraw it in the new style. Pixel Art applies right away.";
     }
+    if ((key === "duration" || key === "fps") && player.last) {   // show the new frame count right away, even if the preview is off screen
+      const L = player.last, d = cur.params.duration, f = cur.params.fps, t = Math.min(L.t, d);
+      player.last = Object.assign({}, L, { t, duration: d, fps: f, frames: Math.round(d * f), frame: Math.min(Math.round(d * f) - 1, Math.floor(t * f)) });
+    }
     syncControls();
-    if (key === "duration" || key === "fps") player.cmd("config", { [key]: value });
+    if (key === "duration" || key === "fps" || key === "camera" || key === "camK" || key === "light" || key === "blur") player.cmd("config", { [key]: value });
+    else if (key === "detail" || key === "physics") setStatus("Scene detail and physics shape the next animation you generate.");
     else { clearTimeout(reloadTimer); reloadTimer = setTimeout(() => showTake(cur), 120); }
     persistCurrent();
   }
@@ -220,7 +251,8 @@
   const player = new Player(monitor, {
     onTime: m => updateTimecode(m),
     onError: msg => showError("This animation hit an error: " + msg),
-    onEnded: () => setPlayIcon(false)
+    onEnded: () => setPlayIcon(false),
+    onPerf: () => setStatus("The preview lowered its motion blur to keep the frame rate. Downloads use full quality.")
   });
   function setPlayIcon(playing) {
     $("#playIcon").innerHTML = playing ? '<path d="M3 2h4v12H3zM9 2h4v12H9z"/>' : '<path d="M4 2l10 6-10 6z"/>';
@@ -269,19 +301,49 @@
     else if ((e.key === "l" || e.key === "L") && tag !== "BUTTON") $("#loopBtn").click();
   });
   $("#duration").addEventListener("input", e => setParam("duration", +e.target.value));
+  $("#camK").addEventListener("input", e => setParam("camK", +e.target.value));
+  $("#physics").addEventListener("change", e => setParam("physics", e.target.checked));
 
   // ------------------------------------------------------------------ status + busy overlay (a tiny job runner)
   function setStatus(text, kind) { const s = $("#status"); s.textContent = text; s.style.color = kind === "err" ? "var(--err)" : kind === "ok" ? "var(--ok)" : "var(--mute)"; }
 
-  function startJob(title, steps) {
+  const FX = window.PTM_FX || { play: () => Promise.resolve(), typeInto: (el, t) => { el.textContent = t; return () => {}; }, orb: () => ({ start() {}, stop() {}, burst() {} }), reduce: true };
+  const orb = FX.orb($("#orbCanvas"));
+  let stopTyping = () => {};
+  const setVal = (el, v) => { el.value = v; el.dispatchEvent(new Event("input")); };
+
+  function startJob(title, steps, promptText) {
     const ul = $("#busySteps"); ul.innerHTML = "";
     const items = steps.map(s => { const li = mk("li"); li.dataset.s = "todo"; li.append(mk("span", "dot"), mk("span", "", s)); ul.append(li); return li; });
-    $("#busyTitle").textContent = title; $("#busyDetail").textContent = ""; $("#busy").hidden = false;
+    const busyEl = $("#busy"), mon = $("#monitor");
+    $("#busyTitle").textContent = title; $("#busyDetail").textContent = ""; $("#busyBar").style.width = "0%";
+    busyEl.hidden = false; busyEl.style.cssText = "";
+    mon.classList.add("making");
+    $("#generateBtn").dataset.busy = "1"; $("#generateBtn .btn-label").textContent = "Making your animation…";
+    // The overlay fades in over the old preview, which blurs and dims behind it. The prompt is typed into the orb.
+    FX.play(busyEl, { opacity: [0, 1], scale: [1.04, 1] }, { duration: 0.4 });
+    if (player.frame) FX.play(player.frame, { filter: ["blur(0px)", "blur(10px)"], scale: [1, 1.05] }, { duration: 0.5, keep: true });
+    orb.start(); stopTyping(); stopTyping = FX.typeInto($("#promptEcho"), promptText ? "“" + promptText + "”" : "", 46);
     const job = {
       ctl: new AbortController(), step: -1,
-      next(detail) { if (this.step >= 0) items[this.step].dataset.s = "done"; this.step++; if (items[this.step]) items[this.step].dataset.s = "run"; if (detail != null) this.detail(detail); },
+      next(detail) { if (this.step >= 0) items[this.step].dataset.s = "done"; this.step++; if (items[this.step]) items[this.step].dataset.s = "run"; $("#busyBar").style.width = Math.min(100, ((this.step + 1) / items.length) * 100 - 6) + "%"; if (detail != null) this.detail(detail); },
       detail(t) { $("#busyDetail").textContent = t; },
-      end() { items.forEach(li => (li.dataset.s = "done")); $("#busy").hidden = true; busy = null; $("#generateBtn").disabled = $("#changeBtn").disabled = false; }
+      // On success the orb bursts, an iris closes over the overlay and the new preview pulls into focus.
+      async end(success) {
+        items.forEach(li => (li.dataset.s = "done")); $("#busyBar").style.width = "100%";
+        busy = null; $("#generateBtn").disabled = $("#changeBtn").disabled = false;
+        $("#generateBtn").dataset.busy = "0"; $("#generateBtn .btn-label").textContent = "Generate animation";
+        stopTyping(); mon.classList.remove("making");
+        if (success && player.frame) {
+          orb.burst();
+          FX.play(player.frame, { filter: ["blur(16px)", "blur(0px)"], scale: [1.09, 1], opacity: [0.15, 1] }, { duration: 1, ease: "out" });
+          await FX.play(busyEl, { clipPath: ["circle(150% at 50% 50%)", "circle(0% at 50% 50%)"] }, { duration: 0.9, ease: "inOut", keep: true });
+        } else {
+          if (player.frame) FX.play(player.frame, { filter: ["blur(10px)", "blur(0px)"], scale: [1.05, 1] }, { duration: 0.4 });
+          await FX.play(busyEl, { opacity: [1, 0] }, { duration: 0.3, keep: true });
+        }
+        busyEl.hidden = true; busyEl.style.cssText = ""; orb.stop();
+      }
     };
     busy = job; $("#generateBtn").disabled = $("#changeBtn").disabled = true;
     job.next();
@@ -298,23 +360,43 @@
     frames: "Frame-by-frame hand-drawn look: quantise time to about 8 drawings per second (const q = Math.floor(progress * drawings) / drawings, with drawings = Math.round(duration * 8)) and drive all motion from q so it moves in held steps. Add a small wobble to every line using hash(...) of the drawing number, and draw slightly imperfect outlines on a warm paper-coloured background."
   };
 
+  const DETAIL_GUIDE = {
+    standard: "Detail level Standard: about 6 to 8 layers and clear, tidy shapes. Keep it under about 300 lines.",
+    high: "Detail level High: a rich background with at least 3 parallax depth layers and atmospheric haze; secondary details (small props, birds, lights, reflections); particle effects (dust, sparks, mist); soft shadows and gradient shading on every subject; secondary motion on everything that moves. Keep it under about 380 lines.",
+    ultra: "Detail level Ultra: maximum detail. 5 or more depth layers; textured surfaces (windows, bricks, leaves, waves) built from many small elements; light shafts and glow; particles; reflections; contact shadows; rim lighting; overlapping secondary animation. It may reach about 450 lines but must still hold the frame rate, so batch similar fills and never create gradients inside big loops."
+  };
+
   function rulesFor(params) {
     const [W, H] = ASPECTS[params.aspect];
-    return `You write animations for a web app. Your JavaScript runs as a classic <script> in a page that already has a full-window <canvas>, and you must follow this exact contract.
+    const p = normParams(params);
+    return `You write high-detail animations for a web app. Your JavaScript runs as a classic <script> in a page that already has a full-window <canvas>, and you must follow this exact contract.
 
 CONTRACT
-- Define two top-level functions: setup(W, H) (optional; runs once; returns a state object) and draw(ctx, t, info) (required; called once per frame).
+- Define these top-level functions: setup(W, H) (optional; runs once; returns a small state object), simulate(state, dt, t, info) (optional; physics, see below) and draw(ctx, t, info) (required; called once per frame, and several times per frame when motion blur is on).
 - ctx is a Canvas 2D context. Draw in a ${W} by ${H} pixel coordinate space (info.W and info.H); it is scaled for you. The canvas is already cleared to black before each call, so paint your own background every frame.
-- t is seconds from 0 to info.duration. info = { W, H, duration: ${params.duration}, progress (t / duration, 0 to 1), frame, frames, fps: ${params.fps}, state }.
-- draw() must be a PURE function of t: the same t always draws the same picture. Never accumulate state between calls, never use Date or performance.now. Compute positions from t or progress. Build any per-object data in setup() using hash(i), never Math.random for things that must stay put.
+- t is seconds from 0 to info.duration. info = { W, H, duration: ${p.duration}, progress (t / duration, 0 to 1), frame, frames, fps: ${p.fps}, state, camera, light }.
+- draw() must be a PURE function of t and info.state: the same t always draws the same picture. Never accumulate state between draw calls, never use Date or performance.now. Compute positions from t or progress. Build per-object data in setup() using hash(i), never Math.random for things that must stay put.
 - Make it a seamless loop: every repeating motion should complete a whole number of cycles over progress 0 to 1, or fade or start off screen, so frame 1 follows the last frame smoothly.
-- Helpers already defined for you, do not redeclare them: TAU, clamp(v,a,b), lerp(a,b,k), hash(n) (deterministic 0 to 1), noise(x) (smooth 1D noise), ease.in, ease.out, ease.inOut, ease.sine, ease.outBack, ease.outElastic (each takes 0 to 1).
+- Helpers already defined, do not redeclare them: TAU, clamp(v,a,b), lerp(a,b,k), hash(n) (deterministic 0 to 1), noise(x) (smooth 1D noise), ease.in, ease.out, ease.inOut, ease.sine, ease.outBack, ease.outElastic (each takes 0 to 1), and PHYS (see below).
 - Use only Canvas 2D and plain JavaScript. No imports, libraries, network, images, or external fonts. Text may use system-ui with ctx.fillText. Do not touch the DOM.
 - Fill the entire canvas and place everything relative to W and H, so it works at any aspect ratio.
-- Aim for a polished, cinematic result: background depth, layered parallax, easing, glow or shadow, and clearly recognisable subjects built from shapes. Keep it under about 300 lines and make sure it runs without errors.
+- The picture is drawn up to ${p.fps} times a second, so keep draw() efficient.
+
+CAMERA AND LIGHT (the app applies these after you draw)
+- The app already applies the camera move (${CAM_NAME[p.camera]}) and the colour grade (${LIGHT_NAME[p.light]}: bloom, vignette, tint) to whatever you draw, and it adds motion blur (${BLURS[p.blur]}). Do NOT draw vignettes, bloom, film grain, letterbox bars, camera shake or motion blur yourself.
+- info.camera = { x, y, zoom, rot } (x and y are fractions of the frame). Use it to add parallax: shift each layer by info.camera.x * W * depth, with depth from 0.1 (far) to 1 (near).
+- info.light = { dx, dy, color, color2, ambient, shadow }. dx and dy are a unit vector pointing TOWARD the light in screen coordinates (y is down). Put highlights and rim light on the side that faces the light, cast shadows the opposite way in the shadow colour, and tint highlights with info.light.color. Shade every subject with at least a light and a dark tone so it looks lit, not flat.
+
+PHYSICS AND MOVEMENT
+- ${p.physics ? "Use physics for anything soft or springy (hair, scarves, cloth, ropes, tails, flags, splashes, bouncing)." : "Physics is optional here."} Define simulate(state, dt, t, info); it changes state one small fixed step at a time (info has W, H, fps, duration, frame). The app runs it once and stores every frame, so scrubbing, looping and export stay exact. draw() reads the result from info.state. Keep state small and JSON-friendly (numbers, arrays, plain objects); keep static scene data (buildings, stars) in module-level variables made in setup, not in state.
+- PHYS.spring(s, target, k, d, dt) with s = {x, v}; PHYS.makeChain(n, x, y, len) and PHYS.chain(points, anchorX, anchorY, dt, {gravity, wind, damping, iters}) for verlet cloth and rope; PHYS.ik2(ax, ay, tx, ty, l1, l2, dir) for two-bone legs and arms (returns the knee or elbow {x, y} and the end point {ex, ey}; dir is 1 or -1 for which way the joint bends).
+- Characters need a real walk or run cycle: feet planted on the ground during stance, opposite arm swing, body bob and lean, anticipation before a jump, squash and stretch on landings, and follow-through on cloth and hair. Move joints with easing, never linearly.
+
+DETAIL
+${DETAIL_GUIDE[p.detail]}
 
 STYLE
-${STYLE_GUIDE[params.style]}
+${STYLE_GUIDE[p.style]}
 
 OUTPUT
 Reply with ONLY one JSON object and nothing else: {"title": "short title, at most 6 words", "note": "one sentence on what to watch for", "code": "the complete JavaScript"}`;
@@ -325,7 +407,7 @@ Reply with ONLY one JSON object and nothing else: {"title": "short title, at mos
     if (!sample) throw { code: "no_sample" };
     let chars = 0;
     const out = await sample.json(prompt, {
-      signal: job.ctl.signal, cache: false, modelTier: $("#detail").value,
+      signal: job.ctl.signal, cache: false, modelTier: $("#tier").value,
       onText: ({ text }) => { chars = text.length; job.detail("Claude has written " + Math.round(chars / 40) + " lines so far"); }
     });
     if (!out || typeof out.code !== "string" || !out.code.trim()) throw { code: "invalid_json" };
@@ -375,9 +457,10 @@ Reply with ONLY one JSON object and nothing else: {"title": "short title, at mos
     const params = Object.assign({}, cur.params);
     repairs = 0; clearError(); bringIntoView($("#monitor"));
     const useClaude = engine === "claude";
+    let ok = false;
     const job = startJob(refineFrom ? "Changing your animation" : "Making your animation",
       useClaude ? ["Sending your brief", "Claude is writing the scene", "Checking that it runs", "Rendering the preview"]
-        : ["Reading your prompt", "Planning the scene", "Building layers", "Rendering the preview"]);
+        : ["Reading your prompt", "Planning the scene", "Building layers", "Rendering the preview"], refineFrom ? change : prompt);
     const aborted = () => job.ctl.signal.aborted;
     try {
       let out;
@@ -401,11 +484,11 @@ Reply with ONLY one JSON object and nothing else: {"title": "short title, at mos
       const take = { id: uid(), title: out.title, note: out.note, prompt: refineFrom ? refineFrom.prompt.split(" → ")[0] + " → " + change : prompt, params, code: out.code, engine, created: Date.now() };
       const r = await previewWithRepair(take, job, params);
       if (r.message === "replaced") return;
-      if (r.ok) { job.next(); await finishTake(take); setStatus("Done. Your animation is playing.", "ok"); }
+      if (r.ok) { ok = true; job.next(); await finishTake(take); setStatus("Done. Your animation is playing.", "ok"); }
       else setStatus("The animation was made but it doesn't run. Try again or change the prompt.", "err");
     } catch (e) {
       setStatus(errorCopy(e), e && e.code === "cancelled" ? "" : "err");
-    } finally { job.end(); }
+    } finally { await job.end(ok); }
   }
 
   // ------------------------------------------------------------------ forms
@@ -423,7 +506,7 @@ Reply with ONLY one JSON object and nothing else: {"title": "short title, at mos
     if (engine === "mock") {
       // Mock: fold the change into the prompt and rebuild, so keywords in it take effect.
       const prompt = (cur.prompt.split(" → ")[0] + ". " + change).slice(0, 600);
-      $("#prompt").value = prompt; $("#change").value = ""; generate({ prompt });
+      setVal($("#prompt"), prompt); $("#change").value = ""; generate({ prompt });
     } else { generate({ refineFrom: cur, change }); $("#change").value = ""; }
   };
   $("#change").addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); $("#changeBtn").click(); } });
@@ -432,7 +515,7 @@ Reply with ONLY one JSON object and nothing else: {"title": "short title, at mos
   $("#heroForm").addEventListener("submit", e => {
     e.preventDefault();
     const v = $("#heroPrompt").value.trim(); if (!v) { $("#heroPrompt").focus(); return; }
-    $("#prompt").value = v;
+    setVal($("#prompt"), v);
     $("#studio").scrollIntoView({ behavior: reduceMotion() ? "auto" : "smooth" });
     setTimeout(() => $("#studioForm").requestSubmit(), 350);
   });
@@ -441,7 +524,7 @@ Reply with ONLY one JSON object and nothing else: {"title": "short title, at mos
   function setEngine(name, quiet) {
     engine = name;
     document.querySelectorAll("#engineSeg button").forEach(b => b.setAttribute("aria-checked", b.dataset.engine === name));
-    $("#detailRow").hidden = name !== "claude";
+    $("#tierRow").hidden = name !== "claude";
     $("#engineNote").textContent = name === "claude" ? "Claude writes a new scene for every prompt." : "Mock mode builds a scene from keywords in your prompt. It needs no AI, so it's good for testing.";
     if (!quiet) setStatus("");
   }
@@ -471,7 +554,7 @@ Reply with ONLY one JSON object and nothing else: {"title": "short title, at mos
       const out = await player.export(b.dataset.format, (p, label) => { $("#exportBar").style.width = Math.round(p * 100) + "%"; $("#exportLabel").textContent = label + " · " + Math.round(p * 100) + "%"; });
       const name = slug(cur.title) + "-" + cur.params.aspect.replace(":", "x") + "." + out.ext;
       await saveBlob(out.blob, name);
-      const fallback = b.dataset.format === "video" && out.ext !== "mp4" ? " This browser can't record MP4, so it saved WebM." : "";
+      const fallback = b.dataset.format === "video" ? (out.ext !== "mp4" ? " This browser can't record MP4, so it saved WebM." : "") + " Recorded at " + out.width + " px" + (out.blurred ? " with motion blur" : "") + (out.width < 1280 ? " so it could keep " + cur.params.fps + " fps in real time." : ".") : "";
       setStatus("Saved " + name + " (" + bytes(out.blob.size) + ")." + fallback, "ok");
     } catch (e) {
       if (e && e.cancelled) setStatus("Export cancelled.");
@@ -497,7 +580,7 @@ Reply with ONLY one JSON object and nothing else: {"title": "short title, at mos
   const exampleThumbs = {};
   function openTake(t) {
     const copy = JSON.parse(JSON.stringify(t)); if (t.engine === "example") copy.id = "ex-open-" + t.id;
-    $("#prompt").value = String(t.prompt).split(" → ")[0];
+    setVal($("#prompt"), String(t.prompt).split(" → ")[0]);
     showTake(t.engine === "example" ? copy : t);
     setStatus("Opened “" + t.title + "”. Edit the prompt or settings, then generate again.");
     bringIntoView($("#monitor"));
@@ -517,7 +600,7 @@ Reply with ONLY one JSON object and nothing else: {"title": "short title, at mos
       b.setAttribute("aria-current", !!(cur && (cur.id === t.id || cur.id === "ex-open-" + t.id)));
       const [W, H] = ASPECTS[t.params.aspect]; const th = mk("div", "thumb"); th.style.aspectRatio = W + " / " + H;
       const src = t.thumb || exampleThumbs[t.id];
-      if (src) { const im = mk("img"); im.src = src; im.alt = ""; th.append(im); } else th.append(mk("span", "text-xs text-[#8b90a6]", "Preview loading…"));
+      if (src) { const im = mk("img"); im.src = src; im.alt = ""; th.append(im); } else { th.classList.add("shimmer"); th.append(mk("span", "text-xs text-mute", "Preview loading…")); }
       const row = mk("div", "flex items-start justify-between gap-2");
       const tx = mk("div", "min-w-0"); tx.append(mk("p", "truncate text-sm font-semibold", t.title), mk("p", "truncate text-xs text-mute", metaLine(t) + (t.created ? " · " + ago(t.created) : " · example")));
       row.append(tx);
@@ -553,16 +636,19 @@ Reply with ONLY one JSON object and nothing else: {"title": "short title, at mos
 
   // ------------------------------------------------------------------ hero player
   const heroPlayer = new Player($("#heroMonitor"), { onTime: m => { $("#heroTc").textContent = fmtTime(m.t) + " · frame " + (m.frame + 1); } });
-  const heroTake = () => PTM_EXAMPLES[0];
+  const heroTake = () => PTM_EXAMPLES.find(e => e.id === "ex-runner") || PTM_EXAMPLES[0];
 
   // ------------------------------------------------------------------ boot
+  PTM_EXAMPLES.forEach(e => (e.params = normParams(e.params)));
   renderControls();
-  cur = JSON.parse(JSON.stringify(history[0] || PTM_EXAMPLES[0]));
+  cur = JSON.parse(JSON.stringify(history[0] || heroTake()));
   if (!history[0]) cur.id = "ex-open-" + cur.id;
-  $("#prompt").value = String(cur.prompt).split(" → ")[0];
+  setVal($("#prompt"), String(cur.prompt).split(" → ")[0]);
   setEngine("mock", true);
   renderGallery();
   showTake(cur).then(() => { setTimeout(buildExampleThumbs, 600); });
   heroPlayer.load(heroTake());
+  window.PTM_IDEAS = IDEAS;
+  FX.boot && FX.boot();
   if (!history.length) tab = "examples", renderGallery();
 })();
