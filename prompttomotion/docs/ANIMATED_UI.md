@@ -33,6 +33,12 @@ PTM_FX.stagger(elements, keyframes, { step: 0.07 });
 - The hero preview card tilts in 3D toward the pointer (`.tilt`), has an animated conic-gradient border (`.gborder`, an `@property --ang` angle that rotates), and floating chips that bob and shift at different depths as the pointer moves (`data-depth`).
 - The headline's second line has a colour shimmer that runs through each letter with a per-letter delay.
 
+## The hero is a live demo
+
+The preview card in the hero does not play a canned video. `heroShow()` in `app.js` runs the real engine: as each example prompt finishes typing in the hero input, the preview blurs, the orb appears with the prompt typed into it, the mock generator builds a scene for that prompt (each with its own style, lighting and camera), and the iris opens onto the result. Then the next prompt starts typing. The same `irisReveal()` function finishes both this and the studio's transition. It pauses while the hero is off screen or the tab is hidden, and it is skipped under reduced motion.
+
+Also in the hero: a soft **aurora** follows the pointer (`--px`, `--py`), the stats **count up** once the entrance finishes, and below the hero a **marquee** of clickable example prompts scrolls slowly (it pauses on hover; a click fills the studio and starts generating).
+
 ## Micro-interactions
 
 | Effect | Where | How |
@@ -114,6 +120,11 @@ export function PreviewStage({ status, prompt, src, steps }) {
 ```
 
 `AnimatePresence` keeps the loading layer mounted while its `exit` iris plays, and the `key` on the video makes each new animation animate in from blur.
+
+## Steering and sound
+
+- Drag any preview to steer the camera. The runtime (not the page) handles it, so it works in the hero card, the studio and full screen. It springs back on release.
+- The studio has a **Sound** button. See `js/sound.js` and the architecture doc for how the soundscape is built and synced.
 
 ## Performance notes
 

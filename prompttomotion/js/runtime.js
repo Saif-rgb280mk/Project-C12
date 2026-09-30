@@ -75,7 +75,8 @@ function PTM_runtime(CONFIG) {
     W: CONFIG.W, H: CONFIG.H, fps: CONFIG.fps, duration: CONFIG.duration, pixel: CONFIG.pixel || 1,
     camMode: CONFIG.camera || "static", camK: CONFIG.camK == null ? 1 : CONFIG.camK, light: CONFIG.light || "none", blur: CONFIG.blur || 0,
     loop: CONFIG.loop !== false, playing: CONFIG.autoplay !== false, t: 0, lastFrame: -1, dirty: true,
-    ready: false, broken: false, state: null, snaps: null, drawFn: null, setupFn: null, simFn: null, subCap: 99, ema: 0
+    ready: false, broken: false, state: null, snaps: null, drawFn: null, setupFn: null, simFn: null, subCap: 99, ema: 0,
+    look: { x: 0, y: 0, tx: 0, ty: 0 }   // the viewer steering the camera by dragging the picture
   };
   const frames = () => Math.max(1, Math.round(S.duration * S.fps));
   const frameAt = t => Math.min(frames() - 1, Math.floor(t * S.fps + 1e-6));
@@ -103,7 +104,7 @@ function PTM_runtime(CONFIG) {
 
   // ---------- camera ----------
   // Returns { x, y, zoom, rot }: x and y are fractions of the frame. Every mode over-scans so edges never show.
-  function cameraAt(p) {
+  function baseCamera(p) {
     const k = S.camK, e = ease.inOut(p), a = p * TAU;
     switch (S.camMode) {
       case "push": return { x: 0, y: 0, zoom: 1 + 0.32 * k * e, rot: 0 };
@@ -115,6 +116,12 @@ function PTM_runtime(CONFIG) {
       case "handheld": return { x: 0.007 * k * (Math.sin(a * 7 + 1) + 0.6 * Math.sin(a * 13 + 2)), y: 0.006 * k * (Math.sin(a * 9 + 3) + 0.5 * Math.sin(a * 17)), zoom: 1.05 + 0.02 * k, rot: 0.006 * k * Math.sin(a * 5 + 4) };
       default: return { x: 0, y: 0, zoom: 1, rot: 0 };
     }
+  }
+  // The viewer can also drag the picture to steer. The zoom grows with the drag so edges never show. Never part of exports.
+  function cameraAt(p) {
+    const c = baseCamera(p), L = S.look;
+    if (!exporting && (L.x || L.y)) { c.x += L.x; c.y += L.y; c.zoom *= 1 + (Math.abs(L.x) + Math.abs(L.y)) * 2.6; }
+    return c;
   }
   function applyCamera(c, cam) {
     if (cam.zoom === 1 && !cam.x && !cam.y && !cam.rot) return;
@@ -268,6 +275,9 @@ function PTM_runtime(CONFIG) {
         else { S.t = S.duration; S.playing = false; S.dirty = true; post("ended"); }
       }
     }
+    const L = S.look, dtk = lastTs === null ? 0.016 : Math.min(0.05, (ts - lastTs) / 1000), kk = 1 - Math.exp(-dtk * (drag ? 14 : 5));
+    if (Math.abs(L.x - L.tx) > 1e-4 || Math.abs(L.y - L.ty) > 1e-4) { L.x += (L.tx - L.x) * kk; L.y += (L.ty - L.y) * kk; S.dirty = true; }
+    else if (L.x !== L.tx || L.y !== L.ty) { L.x = L.tx; L.y = L.ty; S.dirty = true; }
     lastTs = ts;
     const f = frameAt(S.t);
     if (f !== S.lastFrame || S.dirty) {
@@ -280,6 +290,18 @@ function PTM_runtime(CONFIG) {
       post("time", { t: S.t, frame: f, frames: frames(), playing: S.playing, duration: S.duration, fps: S.fps });
     }
   }
+
+  // Drag the picture to steer the camera (touch keeps vertical page scrolling). It springs back when released.
+  let drag = null;
+  view.style.cursor = "grab"; view.style.touchAction = "pan-y";
+  view.addEventListener("pointerdown", e => { drag = { x: e.clientX, y: e.clientY }; try { view.setPointerCapture(e.pointerId); } catch (_) {} view.style.cursor = "grabbing"; post("steer", { on: true }); });
+  view.addEventListener("pointermove", e => {
+    if (!drag) return; const r = view.getBoundingClientRect();
+    S.look.tx = clamp(S.look.tx + ((e.clientX - drag.x) / r.width) * 0.16, -0.06, 0.06); S.look.ty = clamp(S.look.ty + ((e.clientY - drag.y) / r.height) * 0.16, -0.05, 0.05);
+    drag.x = e.clientX; drag.y = e.clientY;
+  });
+  const endDrag = () => { if (!drag) return; drag = null; S.look.tx = 0; S.look.ty = 0; view.style.cursor = "grab"; };
+  view.addEventListener("pointerup", endDrag); view.addEventListener("pointercancel", endDrag);
 
   function snapshot(t, w) {
     const c = document.createElement("canvas");

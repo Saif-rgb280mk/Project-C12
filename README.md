@@ -28,7 +28,9 @@ Generating new animations uses Claude, so it works when the page is opened as an
 
 `prompttomotion/`: a text-to-animation generator with a fully animated interface. Type a description, pick a style (2D Vector, 3D Render, Anime, Pixel Art, Frame-by-Frame), set duration, aspect ratio (16:9, 9:16, 1:1) and FPS (up to 60), then direct it like a film: **camera moves** (push, pull, pan, orbit, crane, handheld), **lighting looks** (natural sunlight, cinematic, neon glow, golden hour, moonlit, studio), **motion blur**, **scene detail** and **fluid character physics**. Play, scrub, loop and download as MP4, GIF or Lottie. Past creations are kept in a history gallery so you can reopen and edit them.
 
-The site itself is animated: a particle entrance with a logo reveal, an interactive particle-mesh hero, typing example prompts, glowing buttons, animated gradient borders and a loading orb that opens into your finished animation.
+Scenes include a physics-driven runner, a dragon with a simulated tail and fire breath, a castle with cloth flags, swaying pine forests and a UFO. Drag any preview to steer the camera, and turn on **Sound** for a procedural soundscape synced to the action (footsteps, thunder, wingbeats).
+
+The site itself is animated: a particle entrance with a logo reveal, an interactive particle-mesh hero whose preview generates live as example prompts type, typing example prompts, glowing buttons, animated gradient borders and a loading orb that opens into your finished animation.
 
 - Open `prompttomotion/index.html` in a browser. **Mock (offline)** mode builds a scene from keywords in your prompt, so the whole app works without any AI. Published as an artifact on claude.ai it can also use **Claude AI** to write a new scene for each prompt.
 - Tech stack, prompt handling, the detail engine and mock testing: [`prompttomotion/docs/ARCHITECTURE.md`](prompttomotion/docs/ARCHITECTURE.md).

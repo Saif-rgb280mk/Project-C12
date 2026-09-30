@@ -151,18 +151,22 @@ const PTM_KEYWORDS = [
   ["rain", /\b(rain|rainy|storm|stormy|drizzle|thunder)/],
   ["lightning", /\b(storm|stormy|thunder|lightning)/],
   ["snow", /\b(snow|snowy|winter|christmas|blizzard|frost)/],
-  ["fire", /\b(fire|flames?|campfire|burning|dragon|volcano|lava)/],
+  ["fire", /\b(fire|flames?|campfire|burning|volcano|lava)/],
   ["fish", /\b(fish|aquarium|underwater|coral|reef|shark)/],
   ["bubbles", /\b(bubbles?|underwater|aquarium|fish|soda)/],
-  ["birds", /\b(birds?|flock|flying|seagulls?|dragon)/],
+  ["birds", /\b(birds?|flock|seagulls?)/],
   ["balls", /\b(balls?|bounce|bouncing|bouncy|football|soccer|basketball)/],
   ["planets", /\b(planets?|orbit|solar|saturn|jupiter)/],
   ["rocket", /\b(rockets?|launch|spaceship|astronaut|lift ?off)/],
   ["confetti", /\b(party|confetti|celebrat|birthday|congrat|win|winner)/],
   ["hearts", /\b(love|hearts?|valentine|romantic|crush)/],
   ["neongrid", /\b(neon|synthwave|retro|80s|cyber|vaporwave|arcade)/],
-  ["leaves", /\b(autumn|fall(ing)? leaves|leaf|leaves|forest)/],
+  ["leaves", /\b(autumn|fall(ing)? leaves|leaf|leaves)/],
   ["car", /\b(cars?|drive|driving|road|race|racing|truck)/],
+  ["dragon", /\b(dragons?|wyvern)\b/],
+  ["castle", /\b(castle|fortress|kingdom|knight|medieval|palace)\b/],
+  ["pines", /\b(forest|woods?|pines?|trees?|jungle)\b/],
+  ["ufo", /\b(ufo|ufos|saucer|aliens?|abduct\w*)\b/],
   ["character", /\b(person|people|man|woman|girl|boy|kid|child|hero|character|runner|running|run|sprint|sprinting|jog|jogging|ninja|athlete|explorer|traveller|traveler|parkour)\b/]
 ];
 
@@ -176,6 +180,7 @@ function PTM_analyze(prompt) {
   else if (/\b(sunset|sunrise|dawn|dusk|evening|golden hour)/.test(low)) sky = "sunset";
   else if (/\b(night|midnight|dark|neon|cyber|moon|stars|firework|synthwave)/.test(low)) sky = "night";
   if (sky === "night" && !layers.includes("stars")) layers.push("stars");
+  if (layers.includes("dragon")) layers.splice(layers.indexOf("fire"), layers.includes("fire") ? 1 : 0);   // dragons breathe their own fire
   const quoted = clean.match(/["“]([^"”]{1,40})["”]/);
   const said = clean.match(/\b(?:says?|saying|the words?|text|title|named|name is|spells?)\s*[:\-]?\s*([A-Za-z0-9!?' ]{2,32})/i);
   const text = quoted ? quoted[1].trim() : said ? said[1].trim() : "";
@@ -267,10 +272,32 @@ function pose(t, W, H, dur) {
   const hand = leg => { const th = Math.sin(gait + leg * Math.PI + Math.PI) * 0.95; return { x: sx + Math.sin(th) * U * 0.3 + U * 0.07, y: sy + U * 0.3 - Math.abs(Math.sin(th)) * U * 0.09 }; };
   return { U, ground, cx, l1, l2, hipY, lean, f: [f0, f1], sx, sy, hx, hy, r, hand: [hand(0), hand(1)], nx: sx - U * 0.01, ny: sy - U * 0.02, bx: hx - r * 0.75, by: hy - r * 0.35 };
 }
-var simulate = has("character") ? function (st, dt, t, info) {
-  const q = pose(t, info.W, info.H, info.duration);
-  PHYS.chain(st.scarf, q.nx, q.ny, dt, { gravity: 520, wind: -2100 + Math.sin(t * 7) * 380, damping: 0.986, iters: 6 });
-  PHYS.chain(st.hair, q.bx, q.by, dt, { gravity: 260, wind: -1100 + Math.sin(t * 9 + 1) * 250, damping: 0.98, iters: 4 });
+// ---- dragon: flight path, wing flap and fire windows are closed-form; the tail is simulated ----
+const FLAPS = dur => Math.max(3, Math.round(dur * 1.6));
+function dragonPose(t, W, H, dur) {
+  const p = t / dur, U = Math.min(W, H) * 0.3, flap = Math.sin(p * TAU * FLAPS(dur));
+  return { p, U, flap, x: -W * 0.22 + W * 1.44 * p, y: H * 0.4 + Math.sin(p * TAU * 2) * H * 0.045 - flap * U * 0.05, bank: Math.cos(p * TAU * 2) * 0.07 };
+}
+const breathing = p => Math.sin(p * TAU * 2 + 0.9) > -0.25;
+function dragonAnchors(q) { return { rx: q.x - q.U * 0.74, ry: q.y + q.U * 0.05, hx: q.x + q.U * 0.88, hy: q.y - q.U * 0.2 }; }
+// ---- castle geometry (flag poles are where the cloth physics is pinned) ----
+function castleGeom(W, H) {
+  const U = Math.min(W * 0.5, H * 0.55), cx = W * (W > H ? 0.68 : 0.5), base = H * 0.78;
+  const towers = [{ cx: cx - U * 0.3, w: U * 0.12, h: U * 0.5 }, { cx: cx + U * 0.3, w: U * 0.12, h: U * 0.56 }, { cx, w: U * 0.15, h: U * 0.72 }];
+  return { U, cx, base, towers, poles: towers.map(t => ({ x: t.cx, y: base - t.h - t.w * 1.4 - U * 0.15 })) };
+}
+var simulate = (has("character") || has("dragon") || has("castle")) ? function (st, dt, t, info) {
+  if (st.scarf) {
+    const q = pose(t, info.W, info.H, info.duration);
+    PHYS.chain(st.scarf, q.nx, q.ny, dt, { gravity: 520, wind: -2100 + Math.sin(t * 7) * 380, damping: 0.986, iters: 6 });
+    PHYS.chain(st.hair, q.bx, q.by, dt, { gravity: 260, wind: -1100 + Math.sin(t * 9 + 1) * 250, damping: 0.98, iters: 4 });
+  }
+  if (st.tail) {
+    const q = dragonPose(t, info.W, info.H, info.duration), a = dragonAnchors(q), c = st.tail;
+    if (Math.hypot(c[0].x - a.rx, c[0].y - a.ry) > q.U * 2) for (let i = 0; i < c.length; i++) { c[i].x = c[i].px = a.rx - i * c[i].len; c[i].y = c[i].py = a.ry; }   // the loop restarts off screen
+    PHYS.chain(c, a.rx, a.ry, dt, { gravity: 260, wind: -1500 + Math.sin(t * 6) * 300, damping: 0.982, iters: 6 });
+  }
+  if (st.flags) { const g = castleGeom(info.W, info.H); st.flags.forEach((f, i) => PHYS.chain(f, g.poles[i].x, g.poles[i].y, dt, { gravity: 150, wind: 1400 + Math.sin(t * 5 + i * 2) * 450, damping: 0.972, iters: 5 })); }
 } : null;
 
 const L = {
@@ -388,6 +415,116 @@ const L = {
     ctx.fillStyle = "#111"; ctx.beginPath(); ctx.arc(q.hx + q.r * 0.42, q.hy - q.r * 0.05, q.r * 0.11, 0, TAU); ctx.fill();
     ctx.fillStyle = "rgba(255,255,255,0.8)"; ctx.beginPath(); ctx.arc(q.hx + q.r * 0.45, q.hy - q.r * 0.09, q.r * 0.04, 0, TAU); ctx.fill();
     leg(0); arm(0);
+  },
+  pines(ctx, p, W, H, S, cam, Lt) {
+    const night = CFG.sky !== "day", snowy = has("snow"), P = DATA.P;
+    const g = ctx.createLinearGradient(0, H * 0.78, 0, H); g.addColorStop(0, snowy ? (night ? "#8da0b8" : "#eef4fb") : (night ? "#0c1d1c" : "#3c6d44")); g.addColorStop(1, snowy ? (night ? "#3a4860" : "#b9c8da") : (night ? "#050d12" : "#1e4029"));
+    DATA.pines.forEach((layer, li) => {
+      const depth = [0.35, 0.65, 1][li], laps = [1, 2, 4][li], base = H * (0.8 + li * 0.045), col = mix(night ? "#10302f" : "#4a8a5c", night ? "#04121a" : "#1d4a33", li / 2);
+      tile(P, (RUN ? p * laps * P : 0) - cam.x * W * depth * 0.5, o => {
+        for (const t of layer) {
+          const h = t.h, w = h * 0.4, sway = Math.sin(p * TAU * 2 + t.ph) * 0.028 * (1 + li * 0.5);
+          ctx.save(); ctx.translate(o + t.x, base); ctx.rotate(sway);
+          ctx.fillStyle = "#3a2a1c"; ctx.fillRect(-w * 0.05, -h * 0.16, w * 0.1, h * 0.16);
+          for (let k = 0; k < 4; k++) {
+            const y0 = -h * (0.12 + k * 0.24), tw = w * (1 - k * 0.2);
+            ctx.fillStyle = col; ctx.beginPath(); ctx.moveTo(-tw / 2, y0); ctx.lineTo(0, y0 - h * 0.4); ctx.lineTo(tw / 2, y0); ctx.closePath(); ctx.fill();
+            if (INKED) { ctx.lineWidth = 2; ctx.strokeStyle = PAL.ink; ctx.stroke(); }
+            if (snowy) { ctx.fillStyle = "rgba(240,247,255,0.92)"; ctx.beginPath(); ctx.moveTo(-tw * 0.22, y0 - h * 0.26); ctx.lineTo(0, y0 - h * 0.4); ctx.lineTo(tw * 0.22, y0 - h * 0.26); ctx.quadraticCurveTo(0, y0 - h * 0.2, -tw * 0.22, y0 - h * 0.26); ctx.fill(); }
+            else if (Lt.dx !== 0) { ctx.fillStyle = "rgba(255,240,200,0.1)"; ctx.beginPath(); ctx.moveTo(0, y0 - h * 0.4); ctx.lineTo(Lt.dx > 0 ? tw / 2 : -tw / 2, y0); ctx.lineTo(0, y0); ctx.closePath(); ctx.fill(); }
+          }
+          ctx.restore();
+        }
+      });
+      const mist = ctx.createLinearGradient(0, base - H * 0.18, 0, base); mist.addColorStop(0, "rgba(200,215,235,0)"); mist.addColorStop(1, "rgba(" + (night ? "110,140,180" : "235,245,255") + "," + (0.2 - li * 0.05) + ")");
+      ctx.fillStyle = mist; ctx.fillRect(0, base - H * 0.18, W, H * 0.18);
+    });
+    ctx.fillStyle = g; ctx.fillRect(0, H * 0.86, W, H * 0.14);
+  },
+  castle(ctx, p, W, H, S, cam, Lt) {
+    const G = castleGeom(W, H), U = G.U, night = CFG.sky !== "day", stone = night ? "#4a5068" : "#9aa0b4", dark = night ? "#2a2f44" : "#6f768c", roof = PAL.accent2;
+    const hill = ctx.createLinearGradient(0, G.base - U * 0.1, 0, H); hill.addColorStop(0, night ? "#1c2b2a" : "#5f9c5a"); hill.addColorStop(1, night ? "#0a1414" : "#2d5a33");
+    ctx.fillStyle = hill; ctx.beginPath(); ctx.moveTo(0, H); ctx.lineTo(0, G.base + U * 0.22); ctx.quadraticCurveTo(G.cx, G.base - U * 0.16, W, G.base + U * 0.22); ctx.lineTo(W, H); ctx.closePath(); ctx.fill();
+    const wallTop = G.base - U * 0.34, wallL = G.cx - U * 0.3, wallW = U * 0.6;
+    const rect = (x, y, w, h, c) => { ctx.fillStyle = c; ctx.fillRect(x, y, w, h); if (INKED) { ctx.lineWidth = 2; ctx.strokeStyle = PAL.ink; ctx.strokeRect(x, y, w, h); } };
+    rect(wallL, wallTop, wallW, U * 0.36, stone);
+    for (let i = 0; i < 9; i++) rect(wallL + i * wallW / 9 + wallW / 60, wallTop - U * 0.035, wallW / 13, U * 0.04, stone);
+    ctx.fillStyle = "rgba(0,0,0,0.18)"; for (let r = 0; r < 4; r++) for (let c = 0; c < 10; c++) ctx.fillRect(wallL + c * wallW / 10 + (r % 2) * wallW / 20, wallTop + U * 0.04 + r * U * 0.08, wallW / 12, 1.5);
+    G.towers.forEach((t, i) => {
+      const x = t.cx - t.w / 2, top = G.base - t.h;
+      rect(x, top, t.w, t.h + U * 0.05, i === 2 ? dark : stone);
+      ctx.fillStyle = "rgba(0,0,0,0.22)"; ctx.fillRect(x + (Lt.dx > 0 ? t.w * 0.65 : 0), top, t.w * 0.35, t.h + U * 0.05);
+      ctx.fillStyle = roof; ctx.beginPath(); ctx.moveTo(x - t.w * 0.14, top); ctx.lineTo(t.cx, top - t.w * 1.4); ctx.lineTo(x + t.w * 1.14, top); ctx.closePath(); ctx.fill(); if (INKED) { ctx.lineWidth = 2; ctx.strokeStyle = PAL.ink; ctx.stroke(); }
+      ctx.fillStyle = "#3a2e22"; ctx.fillRect(t.cx - 1.2, top - t.w * 1.4 - U * 0.15, 2.4, U * 0.15);
+      for (let k = 0; k < (i === 2 ? 3 : 2); k++) { const lit = night || CFG.sky === "sunset"; ctx.fillStyle = lit ? "rgba(255," + (190 + k * 20) + ",100," + (0.6 + 0.3 * Math.sin(p * TAU * 3 + i + k * 2)) + ")" : "#2b3246"; ctx.beginPath(); ctx.ellipse(t.cx, top + U * 0.1 + k * U * 0.16, t.w * 0.14, t.w * 0.26, 0, 0, TAU); ctx.fill(); }
+    });
+    ctx.fillStyle = "#1a1410"; ctx.beginPath(); ctx.moveTo(G.cx - U * 0.06, G.base + U * 0.02); ctx.lineTo(G.cx - U * 0.06, G.base - U * 0.1); ctx.arc(G.cx, G.base - U * 0.1, U * 0.06, Math.PI, 0); ctx.lineTo(G.cx + U * 0.06, G.base + U * 0.02); ctx.fill();
+    ctx.fillStyle = "rgba(255,170,70," + (0.35 + 0.15 * Math.sin(p * TAU * 6)) + ")"; ctx.fillRect(G.cx - U * 0.04, G.base - U * 0.1, U * 0.08, U * 0.11);
+    // flags: cloth physics
+    if (S && S.flags) S.flags.forEach((f, i) => {
+      const fh = U * 0.075, cols = [PAL.accent, PAL.accent2, PAL.accent];
+      ctx.fillStyle = cols[i]; ctx.beginPath();
+      f.forEach((q, j) => { const w = fh * (1 - (j / f.length) * 0.55) / 2; j ? ctx.lineTo(q.x, q.y - w) : ctx.moveTo(q.x, q.y - w); });
+      for (let j = f.length - 1; j >= 0; j--) { const q = f[j], w = fh * (1 - (j / f.length) * 0.55) / 2; ctx.lineTo(q.x, q.y + w); }
+      ctx.closePath(); ctx.fill(); if (INKED) { ctx.lineWidth = 2; ctx.strokeStyle = PAL.ink; ctx.stroke(); }
+      ctx.strokeStyle = "rgba(255,255,255,0.45)"; ctx.lineWidth = 1.5; ctx.beginPath(); f.forEach((q, j) => (j ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y))); ctx.stroke();
+    });
+  },
+  dragon(ctx, p, W, H, S, cam, Lt, t, dur) {
+    const q = dragonPose(t, W, H, dur), U = q.U, A = dragonAnchors(q), scale = "#2f7a4f", belly = "#d8c27a", dark = "#1a4a33", wingC = mix(PAL.accent2, "#000000", 0.25);
+    // fire breath: particles are born at the mouth, so each one's path is a pure function of time
+    ctx.globalCompositeOperation = "lighter";
+    for (let i = 0; i < 90; i++) {
+      const age = ((t * 2.4 + hash(i) * 1.0) % 1) * 0.95, tb = t - age, pb = tb / dur;
+      if (!breathing(pb)) continue;
+      const qb = dragonPose(tb, W, H, dur), ab = dragonAnchors(qb), sp = U * (1.8 + hash(i + 7) * 1.2), k = age / 0.95;
+      const fx = ab.hx + U * 0.12 + sp * age * 0.75, fy = ab.hy + U * 0.1 + (hash(i + 3) - 0.5) * U * 0.35 * k + k * k * U * 0.35, r = U * (0.07 + k * 0.26);
+      const g = ctx.createRadialGradient(fx, fy, 0, fx, fy, r); g.addColorStop(0, "rgba(255," + Math.round(245 - k * 110) + "," + Math.round(170 - k * 140) + "," + (0.85 * (1 - k * 0.9)) + ")"); g.addColorStop(1, "rgba(255,80,20,0)");
+      ctx.fillStyle = g; ctx.fillRect(fx - r, fy - r, r * 2, r * 2);
+    }
+    ctx.globalCompositeOperation = "source-over";
+    ctx.save(); ctx.translate(q.x, q.y); ctx.rotate(q.bank);
+    // tail from the physics chain (drawn in world space)
+    ctx.restore();
+    const tail = S.tail; ctx.lineCap = "round"; ctx.lineJoin = "round";
+    for (let i = tail.length - 1; i >= 1; i--) { const a = tail[i - 1], b = tail[i], w = U * (0.13 - 0.1 * (i / tail.length)); ctx.strokeStyle = i % 2 ? scale : dark; ctx.lineWidth = w; ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+      if (i % 2 === 0) { ctx.fillStyle = PAL.accent2; ctx.beginPath(); ctx.moveTo(b.x - w * 0.3, b.y - w * 0.4); ctx.lineTo(b.x + w * 0.1, b.y - w * 1.3); ctx.lineTo(b.x + w * 0.5, b.y - w * 0.4); ctx.closePath(); ctx.fill(); } }
+    ctx.save(); ctx.translate(q.x, q.y); ctx.rotate(q.bank);
+    const wing = (dx, dy, bright) => {      // a wing is a shoulder, a tip that flaps, finger bones and a membrane
+      const ang = -1.2 - q.flap * 0.9, sx = dx, sy = dy, tx = sx + Math.cos(ang) * U * 0.88, ty = sy + Math.sin(ang) * U * 0.88;
+      const mid = [0.35, 0.7].map(f => ({ x: sx + (tx - sx) * f - U * 0.18 * (1 - f) + Math.cos(ang + 1.5) * U * 0.18 * f, y: sy + (ty - sy) * f + Math.sin(ang + 1.5) * U * 0.22 * f }));
+      ctx.fillStyle = bright ? wingC : mix(PAL.accent2, "#000000", 0.5); ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(tx, ty); ctx.quadraticCurveTo(mid[1].x, mid[1].y + U * 0.12, mid[1].x - U * 0.05, mid[1].y + U * 0.3); ctx.quadraticCurveTo(mid[0].x, mid[0].y + U * 0.3, sx - U * 0.25, sy + U * 0.22); ctx.closePath(); ctx.fill(); if (INKED) { ctx.lineWidth = 2.5; ctx.strokeStyle = PAL.ink; ctx.stroke(); }
+      ctx.strokeStyle = dark; ctx.lineWidth = U * 0.03; ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(tx, ty); ctx.moveTo(sx, sy); ctx.lineTo(mid[0].x, mid[0].y + U * 0.28); ctx.moveTo(sx, sy); ctx.lineTo(mid[1].x, mid[1].y + U * 0.26); ctx.stroke();
+    };
+    wing(-U * 0.12, -U * 0.16, false);
+    const bg = ctx.createLinearGradient(0, -U * 0.3, 0, U * 0.3); bg.addColorStop(0, scale); bg.addColorStop(0.65, dark); bg.addColorStop(1, belly);
+    ctx.fillStyle = bg; ctx.beginPath(); ctx.ellipse(0, 0, U * 0.6, U * 0.24, 0, 0, TAU); ctx.fill(); ink(ctx, 3);
+    ctx.strokeStyle = "rgba(255,255,255,0.12)"; ctx.lineWidth = 1.5; for (let i = -4; i <= 4; i++) { ctx.beginPath(); ctx.arc(i * U * 0.11, -U * 0.04, U * 0.07, Math.PI, 0); ctx.stroke(); }
+    ctx.strokeStyle = scale; ctx.lineWidth = U * 0.15; ctx.lineCap = "round"; ctx.beginPath(); ctx.moveTo(U * 0.42, -U * 0.04); ctx.quadraticCurveTo(U * 0.74, -U * 0.04, U * 0.82, -U * 0.22 - q.flap * U * 0.02); ctx.stroke();
+    const hx = U * 0.88, hy = -U * 0.26 - q.flap * U * 0.02, open = breathing(q.p) ? 0.3 : 0.06;
+    ctx.fillStyle = scale; ctx.beginPath(); ctx.moveTo(hx - U * 0.1, hy - U * 0.08); ctx.lineTo(hx + U * 0.26, hy - U * 0.03 - open * U * 0.1); ctx.lineTo(hx + U * 0.27, hy + U * 0.0); ctx.lineTo(hx - U * 0.06, hy + U * 0.1); ctx.closePath(); ctx.fill(); ink(ctx, 2.5);
+    ctx.fillStyle = "#7a1d12"; ctx.beginPath(); ctx.moveTo(hx + U * 0.02, hy + U * 0.03); ctx.lineTo(hx + U * 0.25, hy + U * 0.02); ctx.lineTo(hx + U * 0.22, hy + U * 0.03 + open * U * 0.3); ctx.lineTo(hx - U * 0.02, hy + U * 0.1); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = PAL.accent2; ctx.beginPath(); ctx.moveTo(hx - U * 0.06, hy - U * 0.08); ctx.lineTo(hx - U * 0.22, hy - U * 0.2); ctx.lineTo(hx - U * 0.02, hy - U * 0.05); ctx.fill();
+    ctx.fillStyle = "#ffe066"; ctx.beginPath(); ctx.arc(hx + U * 0.05, hy - U * 0.03, U * 0.03, 0, TAU); ctx.fill(); ctx.fillStyle = "#111"; ctx.fillRect(hx + U * 0.05, hy - U * 0.055, U * 0.012, U * 0.05);
+    wing(-U * 0.02, -U * 0.2, true);
+    ctx.restore();
+  },
+  ufo(ctx, p, W, H, S, cam, Lt) {
+    const a = p * TAU, U = Math.min(W, H) * 0.2, x = W * (0.5 + 0.14 * Math.sin(a)) + cam.x * W * 0.3, y = H * (0.3 + 0.03 * Math.sin(a * 2)), tilt = Math.cos(a) * 0.09, gy = H * 0.86, top = y + U * 0.12;
+    ctx.globalCompositeOperation = "lighter";
+    const bw = h => U * (0.22 + 0.5 * ((h - top) / (gy - top))), beam = ctx.createLinearGradient(0, top, 0, gy);
+    beam.addColorStop(0, "rgba(170,255,210," + (0.4 + 0.1 * Math.sin(a * 8)) + ")"); beam.addColorStop(1, "rgba(120,220,255,0.1)");
+    ctx.fillStyle = beam; ctx.beginPath(); ctx.moveTo(x - bw(top), top); ctx.lineTo(x + bw(top), top); ctx.lineTo(x + bw(gy), gy); ctx.lineTo(x - bw(gy), gy); ctx.closePath(); ctx.fill();
+    for (let i = 0; i < 44; i++) { const k = wrap(hash(i) + p * 3), h = gy - k * (gy - top), w = bw(h) * 0.85; ctx.fillStyle = "rgba(220,255,240," + Math.sin(k * Math.PI) * 0.8 + ")"; ctx.beginPath(); ctx.arc(x + (hash(i + 5) - 0.5) * 2 * w + Math.sin(k * 14 + i) * 6, h, 1.4 + hash(i + 9) * 2, 0, TAU); ctx.fill(); }
+    const gg = ctx.createRadialGradient(x, gy, 2, x, gy, U * 0.9); gg.addColorStop(0, "rgba(160,255,210,0.45)"); gg.addColorStop(1, "rgba(160,255,210,0)"); ctx.save(); ctx.translate(0, gy); ctx.scale(1, 0.22); ctx.translate(0, -gy); ctx.fillStyle = gg; ctx.fillRect(x - U, gy - U, U * 2, U * 2); ctx.restore();
+    ctx.globalCompositeOperation = "source-over";
+    ctx.save(); ctx.translate(x, y); ctx.rotate(tilt);
+    const hull = ctx.createLinearGradient(0, -U * 0.14, 0, U * 0.16); hull.addColorStop(0, "#e5ebf5"); hull.addColorStop(0.5, "#8b97ad"); hull.addColorStop(1, "#3a4358");
+    ctx.fillStyle = hull; ctx.beginPath(); ctx.ellipse(0, 0, U * 0.52, U * 0.14, 0, 0, TAU); ctx.fill(); ink(ctx, 2.5);
+    const dome = ctx.createRadialGradient(-U * 0.06, -U * 0.22, 2, 0, -U * 0.14, U * 0.22); dome.addColorStop(0, "rgba(220,255,255,0.95)"); dome.addColorStop(1, "rgba(90,200,220,0.55)");
+    ctx.fillStyle = dome; ctx.beginPath(); ctx.ellipse(0, -U * 0.08, U * 0.22, U * 0.17, 0, Math.PI, 0); ctx.fill(); ink(ctx, 2);
+    for (let i = 0; i < 9; i++) { const th = (i / 8 - 0.5) * 2.4, lx = Math.sin(th) * U * 0.42, ly = Math.cos(th) * U * 0.05 + U * 0.02, on = Math.max(0, Math.sin(a * 6 - i * 0.8)); ctx.fillStyle = "rgba(255," + Math.round(200 + 55 * on) + "," + Math.round(80 + 120 * on) + "," + (0.5 + 0.5 * on) + ")"; ctx.beginPath(); ctx.arc(lx, ly, U * 0.022, 0, TAU); ctx.fill(); }
+    ctx.restore();
   },
   sea(ctx, p, W, H, S, cam, Lt) {
     const lightX = has("moon") || CFG.sky === "night" ? W * 0.8 : CFG.sky === "sunset" ? W * 0.5 : W * 0.78;
@@ -582,7 +719,7 @@ const L = {
     }
   }
 };
-const ORDER = ["sky", "stars", "sun", "moon", "neongrid", "clouds", "mountains", "city", "sea", "boat", "planets", "abstract", "rocket", "fish", "bubbles", "ground", "car", "fire", "balls", "birds", "character", "leaves", "snow", "rain", "lightning", "confetti", "hearts", "motes", "text"];
+const ORDER = ["sky", "stars", "sun", "moon", "neongrid", "clouds", "mountains", "pines", "castle", "city", "sea", "boat", "planets", "abstract", "rocket", "fish", "bubbles", "ground", "car", "fire", "balls", "birds", "dragon", "ufo", "character", "leaves", "snow", "rain", "lightning", "confetti", "hearts", "motes", "text"];
 function setup(W, H) {
   const P = W * 1.6, mkLayer = (n, minH, maxH, seedOff) => {
     const out = []; let x = 0, i = 0, widths = [];
@@ -597,8 +734,12 @@ function setup(W, H) {
     return out;
   };
   DATA = { P, city: [mkLayer(0, 0.16, 0.34, 1), mkLayer(1, 0.14, 0.3, 5), mkLayer(2, 0.09, 0.26, 9)] };
-  const q = has("character") ? pose(0, W, H, 6) : { nx: 0, ny: 0, bx: 0, by: 0, U: 100 };
-  const st = { scarf: PHYS.makeChain(16, q.nx, q.ny, q.U * 0.085), hair: PHYS.makeChain(5, q.bx, q.by, q.U * 0.05) };
+  const mkTrees = (n, hmin, hmax, off) => Array.from({ length: n }, (_, i) => ({ x: ((i + hash(i * 2.3 + off) * 0.8) / n) * P, h: H * (hmin + hash(i * 4.1 + off) * (hmax - hmin)), ph: hash(i + off) * TAU }));
+  DATA.pines = [mkTrees(14, 0.16, 0.26, 2), mkTrees(11, 0.2, 0.32, 6), mkTrees(8, 0.26, 0.42, 11)];
+  const st = {};
+  if (has("character")) { const q = pose(0, W, H, 6); st.scarf = PHYS.makeChain(16, q.nx, q.ny, q.U * 0.085); st.hair = PHYS.makeChain(5, q.bx, q.by, q.U * 0.05); }
+  if (has("dragon")) { const q = dragonPose(0, W, H, 6), an = dragonAnchors(q); st.tail = PHYS.makeChain(15, an.rx, an.ry, q.U * 0.1); }
+  if (has("castle")) { const g = castleGeom(W, H); st.flags = g.poles.map(pl => PHYS.makeChain(7, pl.x, pl.y, g.U * 0.05)); }
   DATA.init = st;
   return st;
 }

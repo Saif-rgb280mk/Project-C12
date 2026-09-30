@@ -235,3 +235,17 @@ html.rv-on .rv:not(.in) { opacity: 0; animation: introShow 0s linear 20s forward
   *, *::before, *::after { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; animation-delay: 0s !important; transition-duration: 0.001ms !important; }
   html[data-intro="wait"] [data-anim], html[data-intro="wait"] .hl-ch, html.rv-on .rv:not(.in) { opacity: 1; }
 }
+
+
+/* Hero aurora that follows the pointer, and the prompt marquee */
+.aurora { position: absolute; inset: 0; z-index: -1; pointer-events: none; background: radial-gradient(460px circle at var(--px, 72%) var(--py, 28%), var(--accent-soft), transparent 70%); }
+.marquee { overflow: hidden; border-block: 1px solid var(--line); background: var(--panel); padding-block: 12px; -webkit-mask-image: linear-gradient(90deg, transparent, #000 6%, #000 94%, transparent); mask-image: linear-gradient(90deg, transparent, #000 6%, #000 94%, transparent); }
+.marquee-track { display: flex; gap: 10px; width: max-content; animation: marq 90s linear infinite; }
+.marquee:hover .marquee-track { animation-play-state: paused; }
+@keyframes marq { to { transform: translateX(-50%); } }
+.marq-chip { flex: none; font: 500 14px "DM Sans", system-ui, sans-serif; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 999px; padding: 7px 16px; cursor: pointer; white-space: nowrap; transition: border-color 0.15s, transform 0.15s, color 0.15s; }
+.marq-chip:hover { border-color: var(--accent); color: var(--accent); transform: translateY(-2px); }
+#soundBtn[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+#soundBtn svg { flex: none; }
+#heroBusy .busy-inner { gap: 6px; }
+#heroBusy .prompt-echo { font-size: 13px; min-height: 2.6em; }

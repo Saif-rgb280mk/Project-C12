@@ -27,14 +27,18 @@
     { id: "frames", name: "Frame-by-Frame", hint: "Hand-drawn, 8 drawings a second" }
   ];
   const STYLE_NAME = Object.fromEntries(STYLES.map(s => [s.id, s.name]));
-  const IDEAS = [
-    "A rocket lifting off from a snowy launch pad while stars twinkle",
-    "A pirate ship sailing through a storm at night with lightning",
-    "Neon rain over a cyberpunk city",
-    "Fish swimming in an aquarium with bubbles",
-    "A campfire under the stars",
-    "Confetti falling and the words \"Happy Birthday\""
+  // The hero preview plays these in turn, generated live by the real engine as each prompt is typed.
+  const HERO_SHOW = [
+    { prompt: "A runner sprinting across city rooftops at sunset with a flowing scarf", style: "3d", light: "golden", camera: "handheld" },
+    { prompt: "A dragon flying over snowy mountains breathing fire at night", style: "anime", light: "cinematic", camera: "push" },
+    { prompt: "A knight castle on a hill at sunset with waving flags", style: "3d", light: "golden", camera: "orbit" },
+    { prompt: "A UFO hovering over a quiet pine forest at night", style: "3d", light: "moonlit", camera: "pull" },
+    { prompt: "Neon rain over a cyberpunk city", style: "anime", light: "neon", camera: "panr" },
+    { prompt: "A pirate ship sailing through a storm at night with lightning", style: "vector", light: "cinematic", camera: "crane" },
+    { prompt: "A rocket lifting off from a snowy launch pad while stars twinkle", style: "3d", light: "natural", camera: "push" },
+    { prompt: "Fish swimming in an aquarium with bubbles", style: "vector", light: "studio", camera: "panl" }
   ];
+  const IDEAS = HERO_SHOW.map(h => h.prompt);
   const HISTORY_KEY = "ptm-history-v1", HISTORY_MAX = 24;
 
   // ------------------------------------------------------------------ capabilities (present inside claude.ai only)
@@ -249,7 +253,7 @@
   const monitor = $("#monitor");
   let scrubbing = false;
   const player = new Player(monitor, {
-    onTime: m => updateTimecode(m),
+    onTime: m => { updateTimecode(m); if (window.PTM_SND) PTM_SND.onTime(m); },
     onError: msg => showError("This animation hit an error: " + msg),
     onEnded: () => setPlayIcon(false),
     onPerf: () => setStatus("The preview lowered its motion blur to keep the frame rate. Downloads use full quality.")
@@ -275,6 +279,7 @@
 
   async function showTake(take, { autoplay = true } = {}) {
     cur = take; clearError();
+    if (window.PTM_SND) PTM_SND.setTake(take, take.params);
     syncControls();
     const r = await player.load(take, { autoplay });
     if (r.message === "replaced") return r;
@@ -286,6 +291,8 @@
   $("#prevBtn").onclick = () => player.cmd("step", { n: -1 });
   $("#nextBtn").onclick = () => player.cmd("step", { n: 1 });
   $("#loopBtn").onclick = () => { player.loop = !player.loop; player.cmd("loop", { on: player.loop }); syncControls(); };
+  const soundBtn = $("#soundBtn");
+  if (window.PTM_SND && PTM_SND.supported) soundBtn.onclick = async () => { const on = await PTM_SND.toggle(); soundBtn.setAttribute("aria-pressed", on); soundBtn.querySelector("span").textContent = on ? "Sound: on" : "Sound: off"; }; else soundBtn.hidden = true;
   $("#fullBtn").onclick = () => { (monitor.requestFullscreen ? monitor.requestFullscreen() : Promise.reject()).catch(() => setStatus("Full screen isn't available here.", "err")); };
   const scrub = $("#scrub");
   scrub.addEventListener("pointerdown", () => { scrubbing = true; });
@@ -312,6 +319,14 @@
   let stopTyping = () => {};
   const setVal = (el, v) => { el.value = v; el.dispatchEvent(new Event("input")); };
 
+  // The finish of every transition: the orb bursts, the new preview pulls into focus and an iris closes over the overlay.
+  async function irisReveal(busyEl, frame, orbObj) {
+    orbObj.burst();
+    if (frame) FX.play(frame, { filter: ["blur(16px)", "blur(0px)"], scale: [1.09, 1], opacity: [0.15, 1] }, { duration: 1, ease: "out" });
+    await FX.play(busyEl, { clipPath: ["circle(150% at 50% 50%)", "circle(0% at 50% 50%)"] }, { duration: 0.9, ease: "inOut", keep: true });
+    busyEl.hidden = true; busyEl.style.cssText = ""; orbObj.stop();
+  }
+
   function startJob(title, steps, promptText) {
     const ul = $("#busySteps"); ul.innerHTML = "";
     const items = steps.map(s => { const li = mk("li"); li.dataset.s = "todo"; li.append(mk("span", "dot"), mk("span", "", s)); ul.append(li); return li; });
@@ -334,14 +349,9 @@
         busy = null; $("#generateBtn").disabled = $("#changeBtn").disabled = false;
         $("#generateBtn").dataset.busy = "0"; $("#generateBtn .btn-label").textContent = "Generate animation";
         stopTyping(); mon.classList.remove("making");
-        if (success && player.frame) {
-          orb.burst();
-          FX.play(player.frame, { filter: ["blur(16px)", "blur(0px)"], scale: [1.09, 1], opacity: [0.15, 1] }, { duration: 1, ease: "out" });
-          await FX.play(busyEl, { clipPath: ["circle(150% at 50% 50%)", "circle(0% at 50% 50%)"] }, { duration: 0.9, ease: "inOut", keep: true });
-        } else {
-          if (player.frame) FX.play(player.frame, { filter: ["blur(10px)", "blur(0px)"], scale: [1.05, 1] }, { duration: 0.4 });
-          await FX.play(busyEl, { opacity: [1, 0] }, { duration: 0.3, keep: true });
-        }
+        if (success && player.frame) { await irisReveal(busyEl, player.frame, orb); return; }
+        if (player.frame) FX.play(player.frame, { filter: ["blur(10px)", "blur(0px)"], scale: [1.05, 1] }, { duration: 0.4 });
+        await FX.play(busyEl, { opacity: [1, 0] }, { duration: 0.3, keep: true });
         busyEl.hidden = true; busyEl.style.cssText = ""; orb.stop();
       }
     };
@@ -399,7 +409,7 @@ STYLE
 ${STYLE_GUIDE[p.style]}
 
 OUTPUT
-Reply with ONLY one JSON object and nothing else: {"title": "short title, at most 6 words", "note": "one sentence on what to watch for", "code": "the complete JavaScript"}`;
+Reply with ONLY one JSON object and nothing else: {"title": "short title, at most 6 words", "note": "one sentence on what to watch for", "sky": "one of day, sunset, night, space, underwater", "sound": ["up to 4 tags that describe what the scene should sound like, chosen from: rain, wind, sea, fire, city, lightning, rocket, car, ufo, dragon, character, pines, birds, bubbles, confetti, hearts, neongrid, planets, snow"], "code": "the complete JavaScript"}`;
   }
 
   async function claudeCall(prompt, params, job) {
@@ -411,7 +421,7 @@ Reply with ONLY one JSON object and nothing else: {"title": "short title, at mos
       onText: ({ text }) => { chars = text.length; job.detail("Claude has written " + Math.round(chars / 40) + " lines so far"); }
     });
     if (!out || typeof out.code !== "string" || !out.code.trim()) throw { code: "invalid_json" };
-    return { title: String(out.title || "Untitled").slice(0, 60), note: String(out.note || ""), code: out.code };
+    return { title: String(out.title || "Untitled").slice(0, 60), note: String(out.note || ""), code: out.code, sound: Array.isArray(out.sound) ? { layers: out.sound.map(String).slice(0, 6), sky: String(out.sky || "") } : null };
   }
 
   function errorCopy(e) {
@@ -481,7 +491,7 @@ Reply with ONLY one JSON object and nothing else: {"title": "short title, at mos
         job.next(); out = PTM_mock(prompt, params.style); await sleep(300);
         if (aborted()) throw { code: "cancelled" };
       }
-      const take = { id: uid(), title: out.title, note: out.note, prompt: refineFrom ? refineFrom.prompt.split(" → ")[0] + " → " + change : prompt, params, code: out.code, engine, created: Date.now() };
+      const take = { id: uid(), title: out.title, note: out.note, prompt: refineFrom ? refineFrom.prompt.split(" → ")[0] + " → " + change : prompt, params, code: out.code, engine, created: Date.now(), sound: out.analysis ? { layers: out.analysis.layers, sky: out.analysis.sky } : out.sound || null };
       const r = await previewWithRepair(take, job, params);
       if (r.message === "replaced") return;
       if (r.ok) { ok = true; job.next(); await finishTake(take); setStatus("Done. Your animation is playing.", "ok"); }
@@ -636,6 +646,34 @@ Reply with ONLY one JSON object and nothing else: {"title": "short title, at mos
 
   // ------------------------------------------------------------------ hero player
   const heroPlayer = new Player($("#heroMonitor"), { onTime: m => { $("#heroTc").textContent = fmtTime(m.t) + " · frame " + (m.frame + 1); } });
+  const heroOrb = FX.orb($("#heroOrb")), heroBusy = $("#heroBusy");
+  let heroWorking = false, heroVisible = true, stopHeroType = () => {};
+  new IntersectionObserver(es => { heroVisible = es[0].isIntersecting; }, { threshold: 0.2 }).observe($("#heroCard"));
+  // As each example prompt finishes typing, the preview "generates" it with the real engine: orb, then iris open.
+  async function heroShow(prompt) {
+    const entry = HERO_SHOW.find(h => h.prompt === prompt);
+    if (!entry || heroWorking || FX.reduce || !heroVisible || document.hidden) return;
+    heroWorking = true;
+    try {
+      const m = PTM_mock(prompt, entry.style);
+      const take = { id: "hero-" + Date.now(), title: m.title, note: m.note, prompt, code: m.code, engine: "mock", params: normParams({ style: entry.style, duration: 6, aspect: "16:9", fps: 30, camera: entry.camera, light: entry.light, blur: 1, detail: "high" }) };
+      heroBusy.hidden = false; heroBusy.style.cssText = "";
+      FX.play(heroBusy, { opacity: [0, 1] }, { duration: 0.3 });
+      if (heroPlayer.frame) FX.play(heroPlayer.frame, { filter: ["blur(0px)", "blur(8px)"], scale: [1, 1.04] }, { duration: 0.4, keep: true });
+      heroOrb.start(); stopHeroType(); stopHeroType = FX.typeInto($("#heroEcho"), "“" + prompt + "”", 70);
+      await Promise.all([heroPlayer.load(take), sleep(1300)]);
+      $("#heroTitle").textContent = take.title;
+      await irisReveal(heroBusy, heroPlayer.frame, heroOrb);
+    } finally { heroWorking = false; stopHeroType(); heroBusy.hidden = true; heroOrb.stop(); }
+  }
+  window.PTM_onHeroTyped = heroShow;
+
+  // A slow marquee of prompts: click one to make it.
+  (function marquee() {
+    const track = $("#marqueeTrack"); if (!track) return;
+    const add = () => { for (const t of IDEAS.concat(["Confetti falling and the words \"Happy Birthday\"", "A campfire under the stars", "A girl running through the mountains at sunset", "Snow falling on a quiet pine forest"])) { const b = mk("button", "marq-chip", t); b.type = "button"; b.onclick = () => { setVal($("#prompt"), t); $("#studio").scrollIntoView({ behavior: reduceMotion() ? "auto" : "smooth" }); setTimeout(() => $("#studioForm").requestSubmit(), 450); }; track.append(b); } };
+    add(); add();
+  })();
   const heroTake = () => PTM_EXAMPLES.find(e => e.id === "ex-runner") || PTM_EXAMPLES[0];
 
   // ------------------------------------------------------------------ boot

@@ -10,7 +10,8 @@ This document covers three things you asked for: the recommended tech stack, how
 | `js/app.js` | The app: form, generators, player control, exports, history, loading and reveal transitions. |
 | `js/fx.js` | Everything that makes the page itself move: entrance, particle hero, typing, tilt, glow, scroll reveals, the loading orb. See [ANIMATED_UI.md](ANIMATED_UI.md). |
 | `js/runtime.js` | The player that runs **inside** a sandboxed iframe: clock, scrubbing, camera, lighting, motion blur, baked physics, MP4/GIF/Lottie exporters. |
-| `js/scenes.js` | Example scenes and the offline **mock generator**. |
+| `js/scenes.js` | Example scenes and the offline **mock generator** (runner, dragon, castle, pine forest, UFO, cities, seas, weather and more). |
+| `js/sound.js` | Procedural sound design (Web Audio), synced to the player clock. |
 | `js/tailwind.config.js` | Tailwind config (colours point at CSS variables). |
 | `css/app.css` | Colour tokens (light and dark), sliders, player and card styles. |
 | `build.py` | Bundles everything into one HTML file. |
@@ -66,15 +67,21 @@ These are applied by the runtime around the scene, so they work on every animati
 
 Scene code is untrusted, so it runs in `<iframe sandbox="allow-scripts">` with no `allow-same-origin`. It cannot read the page, cookies or storage, and it can only talk to the app through `postMessage`. On load the runtime draws four test frames off screen; if the scene throws, the app shows the error and (for Claude scenes) asks Claude to repair the code once, automatically.
 
+### Steering, sound and the richer scenes
+
+- **Drag to steer.** Dragging the picture moves the camera up to about 6% of the frame (`S.look`), zooms in slightly as you drag so edges never show, and springs back when you let go. It works while paused, it adds to whatever camera move is selected, and scenes receive it in `info.camera` so their parallax responds. It is never part of an export.
+- **Sound** (`js/sound.js`). No audio files: everything is synthesised with the Web Audio API. An animation carries tags (from the mock generator's analysis of the prompt, or the `sound` list Claude returns: rain, wind, sea, fire, city, lightning, rocket, car, ufo, dragon, character, pines, birds, bubbles, confetti, hearts, neongrid, planets, snow). Tags become continuous beds (rain hiss, ocean swell, engine drones, a musical pad chosen from the sky's mood), random events (crickets, birds, bubbles, fire crackle, chimes, a synth arpeggio) and **events synced to the player clock**: a footstep on every foot-plant, thunder after each lightning flash, a whoosh on every wingbeat, a burst for each firework. Events only fire when the clock crosses a moment during playback, so scrubbing doesn't trigger them. Sound is off by default, starts only from a click, fades when paused, and is **not included in downloads**.
+- **More scene subjects** in the mock generator. The dragon's flight path, wing flap and fire windows are closed-form functions of time; its tail is a simulated chain. Fire-breath particles are born at the mouth, so each particle's path is computed from where the head was when it was born. The castle's flags are cloth chains pinned to the spires. Pine forests sway in three parallax layers, and the UFO has a tractor beam with rising particles.
+
 ## 3. How prompts are handled
 
 1. **Collect**: text (max 600 characters), plus `style`, `duration` (2–15 s), `aspect` (16:9, 9:16, 1:1) and `fps` (12, 24, 30, 60).
 2. **Map options to constraints** (`ASPECTS` and `rulesFor()` in `app.js`): aspect becomes a pixel size (960×540, 540×960, 720×720); style becomes a paragraph of art direction; duration and fps are passed as numbers; camera, lighting and blur are named so the model doesn't redraw them; detail level and the physics switch pick the matching paragraphs.
 3. **Build the brief** = fixed rules (the contract, helpers, safety rules, output format) + style paragraph + the user's words inside triple quotes so they can't be mistaken for instructions.
-4. **Call the generator**. The reply must be one JSON object: `{ "title", "note", "code" }`.
+4. **Call the generator**. The reply must be one JSON object: `{ "title", "note", "sky", "sound", "code" }`.
 5. **Validate**: parse JSON, check `code` is a non-empty string, run the self-test in the iframe.
 6. **Repair once** if the scene crashes: send the code plus the exact error back and ask for a complete fixed version.
-7. **Save**: render a thumbnail, store the take (prompt, params, code, thumbnail) in history.
+7. **Save**: keep the sound tags, render a thumbnail, store the take (prompt, params, code, thumbnail) in history.
 8. **Edit later**: "Change this animation" sends the current code plus the change request and asks for the full new code, not a diff.
 
 Options that change a finished take without another model call: duration, fps, camera, camera intensity, lighting and motion blur (sent to the running player with a `config` message), aspect ratio (player reloads at the new size), and Pixel Art (the runtime renders at 1/4 resolution).
@@ -133,6 +140,9 @@ Because the mock output goes through the same player, exporters and history as r
 | `Confetti falling and the words "Happy Birthday"` | confetti and animated text |
 | `Sunset over the ocean with birds` | sun, sea, birds |
 | `A runner sprinting across city rooftops at sunset with a flowing scarf` | three parallax city layers, sun, the running character with a physics scarf and hair |
+| `A dragon flying over snowy mountains breathing fire at night` | stars, moon, mountains, snow, the dragon with a simulated tail and fire breath |
+| `A knight castle on a hill at sunset with waving flags` | sun, mountains, castle with cloth-simulated flags |
+| `A UFO hovering over a quiet pine forest at night` | stars, moon, swaying pines, UFO with a tractor beam |
 
 ### Adding a keyword or layer
 1. Add `["balloons", /\b(balloons?|party)\b/]` to `PTM_KEYWORDS`.

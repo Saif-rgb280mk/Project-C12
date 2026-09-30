@@ -45,6 +45,7 @@
   <!-- ============ Hero ============ -->
   <section id="hero" class="hero relative overflow-hidden">
     <canvas id="heroCanvas" aria-hidden="true"></canvas>
+    <div class="aurora" aria-hidden="true"></div>
     <div class="orb-glow orb-a" aria-hidden="true"></div>
     <div class="orb-glow orb-b" aria-hidden="true"></div>
     <div class="relative mx-auto grid max-w-[1240px] items-center gap-10 px-4 pb-14 pt-10 md:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)] md:gap-12 md:pt-16">
@@ -61,19 +62,28 @@
             </div>
             <button class="btn btn-primary px-6 py-3 text-[15px]" type="submit">Generate</button>
           </div>
-          <p id="heroHint" class="text-xs text-mute">Press → in the empty box to use the idea that is typing.</p>
+          <p id="heroHint" class="text-xs text-mute">Watch the preview draw each idea as it types. Press → in the empty box to use it.</p>
           <div class="flex flex-wrap gap-2" id="heroIdeas" aria-label="Example prompts"></div>
         </form>
         <ul class="mt-6 flex flex-wrap gap-x-6 gap-y-2 text-sm text-mute" data-anim="fade" aria-label="Highlights">
-          <li class="stat"><b class="tc text-ink">60</b> frames a second</li>
-          <li class="stat"><b class="tc text-ink">7</b> lighting looks</li>
-          <li class="stat"><b class="tc text-ink">8</b> camera moves</li>
+          <li class="stat"><b class="tc text-ink" data-count="60">60</b> frames a second</li>
+          <li class="stat"><b class="tc text-ink" data-count="7">7</b> lighting looks</li>
+          <li class="stat"><b class="tc text-ink" data-count="8">8</b> camera moves</li>
+          <li class="stat"><b class="tc text-ink" data-count="12">12</b> scene layers to mix</li>
         </ul>
       </div>
 
       <div class="relative min-w-0" data-anim="right">
         <div class="hero-card tilt gborder glow-el" data-tilt="5" id="heroCard">
-          <div class="monitor fill" id="heroMonitor" style="aspect-ratio:16/9"></div>
+          <div class="monitor fill" id="heroMonitor" style="aspect-ratio:16/9">
+            <div class="busy" id="heroBusy" hidden>
+              <canvas id="heroOrb" aria-hidden="true"></canvas>
+              <div class="busy-inner">
+                <div class="busy-head"><span class="ring-spin" aria-hidden="true"></span><p class="font-display text-base font-bold">Drawing your scene</p></div>
+                <p class="prompt-echo" id="heroEcho"></p>
+              </div>
+            </div>
+          </div>
           <div class="ticks mt-2 rounded-sm" aria-hidden="true"></div>
           <div class="flex items-center justify-between gap-3 px-2 pb-1 pt-2 text-[13px]">
             <span class="flex min-w-0 items-center gap-2"><i class="rec-dot" aria-hidden="true"></i><span class="truncate font-semibold" id="heroTitle">Rooftop runner</span></span>
@@ -86,6 +96,11 @@
         <span class="chip-float" data-depth="0.9" style="--d:6.5s;--r:4deg;bottom:-24px;right:26%">Motion blur</span>
       </div>
     </div>
+  </section>
+
+  <!-- ============ Prompt marquee ============ -->
+  <section class="marquee" aria-label="Example prompts you can click">
+    <div class="marquee-track" id="marqueeTrack"></div>
   </section>
 
   <!-- ============ Cinematic controls ============ -->
@@ -253,12 +268,15 @@
                 <button type="button" class="btn btn-icon" id="nextBtn" title="Next frame (→)" aria-label="Next frame">
                   <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M11 3h2v10h-2zM3 3v10l7-5z"/></svg></button>
                 <button type="button" class="btn" id="loopBtn" aria-pressed="true" title="Loop (L)">Loop: on</button>
+                <button type="button" class="btn" id="soundBtn" aria-pressed="false" title="Turn on sound for the preview (downloads are silent)"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 6v4h3l4 3V3L5 6z"/><path d="M11.5 5.5a3.5 3.5 0 0 1 0 5M13.3 3.7a6 6 0 0 1 0 8.6"/></svg><span>Sound: off</span></button>
                 <span class="tc ml-auto text-sm" id="timecode">00:00.00 / 00:06.00</span>
                 <span class="tc hidden text-sm text-mute sm:inline" id="frameNo">frame 1/180</span>
                 <button type="button" class="btn btn-icon" id="fullBtn" title="Full screen" aria-label="Full screen">
                   <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4"/></svg></button>
               </div>
             </div>
+
+            <p class="mt-2 text-xs text-mute">Drag the preview to steer the camera. Sound plays in the preview only. Downloads are silent.</p>
 
             <!-- Refine -->
             <div class="mt-4 grid gap-2 border-t border-line pt-4">
@@ -360,4 +378,5 @@
 <script src="js/fx.js"></script>
 <script src="js/runtime.js"></script>
 <script src="js/scenes.js"></script>
+<script src="js/sound.js"></script>
 <script src="js/app.js"></script>

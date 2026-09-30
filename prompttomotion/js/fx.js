@@ -87,7 +87,14 @@
     const chars = $$(".hl-ch"), items = $$("[data-anim]");
     items.forEach((el, i) => play(el, kinds[el.dataset.anim] || kinds.up, { duration: 0.85, delay: 0.05 + i * 0.09 }));
     stagger(chars, { opacity: [0, 1], y: [46, 0], filter: ["blur(12px)", "blur(0px)"], rotate: [4, 0] }, { duration: 0.8, delay: 0.12, step: 0.032 });
+    $$("[data-count]").forEach(el => countUp(el, +el.dataset.count, 0.9));
     setTimeout(() => { root.dataset.intro = "done"; }, 2200);
+  }
+  function countUp(el, to, delay) {
+    if (reduce) { el.textContent = to; return; }
+    const t0 = performance.now() + delay * 1000;
+    const tick = now => { const k = clamp((now - t0) / 1200, 0, 1); el.textContent = Math.round(to * easeOut(k)); if (k < 1) requestAnimationFrame(tick); };
+    requestAnimationFrame(tick);
   }
 
   function runIntro() {
@@ -187,7 +194,7 @@
   // ------------------------------------------------------------------ typing effect for example prompts
   function typer(input, holder, phrases, opts = {}) {
     if (!input || !holder) return;
-    let i = Math.floor(Math.random() * phrases.length), n = 0, dir = 1, hold = 0, timer = 0, current = "";
+    let i = opts.start != null ? opts.start : Math.floor(Math.random() * phrases.length), n = 0, dir = 1, hold = 0, timer = 0, current = "";
     const update = () => { holder.classList.toggle("off", document.activeElement === input || input.value !== ""); };
     if (reduce) { holder.textContent = phrases[i]; update(); ["focus", "blur", "input"].forEach(ev => input.addEventListener(ev, update)); return; }
     function step() {
@@ -195,7 +202,7 @@
       if (hold > 0) { hold -= 1; timer = setTimeout(step, 60); return; }
       n += dir;
       holder.textContent = current.slice(0, n);
-      if (dir === 1 && n >= current.length) { dir = -1; hold = 26; }
+      if (dir === 1 && n >= current.length) { dir = -1; hold = 26; if (opts.onTyped) opts.onTyped(current); }
       else if (dir === -1 && n <= 0) { dir = 1; i = (i + 1) % phrases.length; hold = 5; }
       timer = setTimeout(step, dir === 1 ? 34 + Math.random() * 40 : 14);
     }
@@ -228,6 +235,7 @@
     const hero = $("#hero");
     if (hero) hero.addEventListener("pointermove", e => {
       const r = hero.getBoundingClientRect(), x = (e.clientX - r.left) / r.width - 0.5, y = (e.clientY - r.top) / r.height - 0.5;
+      hero.style.setProperty("--px", e.clientX - r.left + "px"); hero.style.setProperty("--py", e.clientY - r.top + "px");
       for (const c of $$("[data-depth]", hero)) { const dp = parseFloat(c.dataset.depth); c.style.translate = x * dp * -34 + "px " + y * dp * -24 + "px"; }
     });
   }
@@ -303,7 +311,7 @@
     setupReveal();
     headerScroll();
     const ideas = window.PTM_IDEAS || [];
-    typer($("#heroPrompt"), $("#heroTyper"), ideas);
+    typer($("#heroPrompt"), $("#heroTyper"), ideas, { start: 1, onTyped: p => window.PTM_onHeroTyped && window.PTM_onHeroTyped(p) });
     typer($("#prompt"), $("#promptTyper"), ideas);
     return runIntro();
   }
