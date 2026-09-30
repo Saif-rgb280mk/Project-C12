@@ -1,0 +1,323 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"></head>
+<body>
+<title>Stair Tumble</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bangers&family=Manrope:wght@500;700&display=swap">
+<style>
+/* Layout: one full-screen 3D stage, with a slim control bar floating at the bottom. Single dark look on purpose. */
+:root {
+  --bg: #161B21; --glass: rgba(18, 22, 28, 0.78); --ink: #F2F4F7; --muted: #AEB6C2; --line: rgba(255, 255, 255, 0.14);
+  --accent: #F2C230; --accent-ink: #1B1B1B;
+  --f-comic: "Bangers", "Impact", system-ui, sans-serif;
+  --f-body: "Manrope", "Segoe UI", system-ui, sans-serif;
+  color-scheme: dark;
+}
+html, body { height: 100%; }
+body { background: var(--bg); color: var(--ink); font: 14px/1.4 var(--f-body); overflow: hidden; }
+.stage { position: relative; height: 100%; min-height: 320px; }
+.stage canvas { display: block; width: 100%; height: 100%; cursor: grab; touch-action: none; }
+.stage canvas:active { cursor: grabbing; }
+.title { position: absolute; top: 14px; left: 16px; right: 16px; pointer-events: none; display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.title h1 { margin: 0; font: 400 30px/1 var(--f-comic); letter-spacing: .04em; text-shadow: 0 2px 0 rgba(0,0,0,.35); }
+.title p { margin: 4px 0 0; color: var(--ink); opacity: .8; font-size: 13px; }
+.ok { position: absolute; left: 50%; top: 16%; transform: translate(-50%, 0) rotate(-4deg) scale(.6); opacity: 0; transition: opacity .25s, transform .35s cubic-bezier(.3, 1.6, .5, 1); pointer-events: none;
+  font: 400 clamp(40px, 9vw, 88px)/1 var(--f-comic); color: var(--accent); letter-spacing: .03em; -webkit-text-stroke: 3px #1B1B1B; paint-order: stroke fill; text-shadow: 0 6px 0 rgba(0,0,0,.35); white-space: nowrap; }
+.ok.show { opacity: 1; transform: translate(-50%, 0) rotate(-4deg) scale(1); }
+.bar { position: absolute; left: 16px; right: 16px; bottom: calc(14px + env(safe-area-inset-bottom, 0px)); display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; padding: 10px 12px; border-radius: 14px; background: var(--glass); border: 1px solid var(--line); backdrop-filter: blur(8px); max-width: 720px; margin: 0 auto; }
+.bar button { font: 700 13px var(--f-body); color: var(--ink); background: transparent; border: 1px solid var(--line); border-radius: 9px; padding: 7px 12px; cursor: pointer; }
+.bar button:hover { border-color: var(--muted); }
+.bar button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.bar button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.track { flex: 1 1 160px; min-width: 120px; height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
+.track i { display: block; height: 100%; width: 0; background: var(--accent); }
+.hint { width: 100%; color: var(--muted); font-size: 12px; }
+.err { position: absolute; inset: 0; display: grid; place-items: center; padding: 16px; text-align: center; color: var(--muted); }
+</style>
+
+<div class="stage" id="stage">
+  <div class="title">
+    <div>
+      <h1>Stair Tumble</h1>
+      <p>Three flights down. Nobody was hurt in the making of this cartoon.</p>
+    </div>
+  </div>
+  <div class="ok" id="ok">I'm OK!</div>
+  <div class="bar">
+    <button id="playBtn" aria-label="Pause">Pause</button>
+    <button id="replayBtn">Replay</button>
+    <button id="slowBtn" aria-pressed="false">Slow motion</button>
+    <button id="camBtn" aria-pressed="true">Follow camera</button>
+    <div class="track" aria-hidden="true"><i id="prog"></i></div>
+    <div class="hint">Drag to look around. Scroll or pinch to zoom.</div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.149.0/build/three.min.js"></script>
+<script>
+(() => {
+  const stage = document.getElementById("stage");
+  if (!window.THREE) { stage.insertAdjacentHTML("beforeend", '<div class="err">The 3D engine didn\'t load. Check your connection and reload the page.</div>'); return; }
+  if (THREE.ColorManagement) THREE.ColorManagement.legacyMode = false;
+  const PI = Math.PI, TAU = PI * 2;
+  const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+  const lerp = (a, b, k) => a + (b - a) * k;
+  const smooth = v => { v = clamp(v, 0, 1); return v * v * (3 - 2 * v); };
+  const easeOut = v => 1 - (1 - v) * (1 - v);
+  const posmod = (a, m) => ((a % m) + m) % m;
+
+  // ---------- Renderer, scene, camera ----------
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.outputEncoding = THREE.sRGBEncoding;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.05;
+  stage.prepend(renderer.domElement);
+
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color("#28323c");
+  scene.fog = new THREE.Fog("#28323c", 12, 26);
+  const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 60);
+
+  scene.add(new THREE.HemisphereLight("#dfe9f3", "#3a3128", 0.75));
+  const sun = new THREE.DirectionalLight("#fff3e0", 1.35);
+  sun.position.set(5, 10, 7);
+  sun.target.position.set(1.2, 1.5, -0.7);
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(2048, 2048);
+  Object.assign(sun.shadow.camera, { left: -7, right: 7, top: 7, bottom: -7, near: 1, far: 30 });
+  sun.shadow.bias = -0.0005;
+  scene.add(sun, sun.target);
+
+  const mat = (color, rough = 0.8, extra = {}) => new THREE.MeshStandardMaterial({ color, roughness: rough, ...extra });
+  const box = (w, h, d, m, x, y, z) => { const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m); b.position.set(x, y, z); b.castShadow = b.receiveShadow = true; scene.add(b); return b; };
+
+  // ---------- Stairwell ----------
+  const RISE = 0.18, RUN = 0.28, N = 8, FL = N * RUN, FD = N * RISE, H0 = 3 * FD, LANE_B = -1.35, SW = 1.2;
+  const Z_MIN = LANE_B - SW / 2, Z_MAX = SW / 2, Z_MID = (Z_MIN + Z_MAX) / 2, Z_SPAN = Z_MAX - Z_MIN;
+  const flights = [
+    { d: 1, z: 0, x0: 0, yTop: H0 },
+    { d: -1, z: LANE_B, x0: FL, yTop: H0 - FD },
+    { d: 1, z: 0, x0: 0, yTop: H0 - 2 * FD }
+  ];
+  const concrete = mat("#c8c6bf", 0.9), nosing = mat("#f2c230", 0.6), slab = mat("#a9a7a0", 0.95);
+  for (const f of flights) {
+    for (let j = 0; j < N; j++) {
+      const top = f.yTop - (j + 1) * RISE, cx = f.x0 + f.d * (j + 0.5) * RUN;
+      box(RUN, RISE + 0.08, SW, concrete, cx, top - (RISE + 0.08) / 2, f.z);
+      box(0.05, 0.012, SW - 0.1, nosing, f.x0 + f.d * (j * RUN + 0.03), top + 0.006, f.z);
+    }
+    const len = Math.hypot(FL, FD), s = box(len, 0.12, SW, slab, f.x0 + f.d * FL / 2, f.yTop - FD / 2 - 0.2, f.z);
+    s.rotation.z = -f.d * Math.atan2(FD, FL);
+  }
+  box(2.2, 0.2, Z_SPAN, concrete, -1.1, H0 - 0.1, Z_MID);                 // top floor
+  box(1.3, 0.2, Z_SPAN, concrete, FL + 0.65, H0 - FD - 0.1, Z_MID);       // landing 1
+  box(1.3, H0 - 2 * FD, Z_SPAN, concrete, -0.65, (H0 - 2 * FD) / 2, Z_MID); // landing 2 (solid block)
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(40, 40), mat("#56626c", 0.85));
+  floor.rotation.x = -PI / 2; floor.receiveShadow = true; scene.add(floor);
+  const wall = box(14, 9, 0.2, mat("#8fa89e", 0.95), 1, 4.5, Z_MIN - 0.1);
+  wall.castShadow = false;
+  box(14, 0.5, 0.04, mat("#6f8a80"), 1, 0.25, Z_MIN + 0.02);              // skirting
+  box(0.9, 1.9, 0.05, mat("#7b5236", 0.7), -1.4, H0 + 0.95, Z_MIN + 0.03); // door at the top
+  box(0.06, 0.06, 0.06, mat("#d8b04a", 0.3, { metalness: 0.8 }), -1.1, H0 + 0.95, Z_MIN + 0.08);
+  // a plant at the bottom, for scale
+  box(0.36, 0.4, 0.36, mat("#b5643c"), FL + 2.9, 0.2, -0.9);
+  for (let i = 0; i < 6; i++) { const leaf = new THREE.Mesh(new THREE.SphereGeometry(0.22, 12, 10), mat("#3f8a4f", 0.7)); leaf.position.set(FL + 2.9 + Math.cos(i) * 0.12, 0.62 + (i % 3) * 0.14, -0.9 + Math.sin(i * 2) * 0.12); leaf.castShadow = true; scene.add(leaf); }
+
+  // ---------- Character ----------
+  const shirt = mat("#e9772d", 0.7), pants = mat("#2f4a86", 0.8), skin = mat("#f0c39b", 0.6), shoe = mat("#1f2226", 0.6), hairM = mat("#3a2718", 0.9), dark = mat("#111111", 0.3);
+  const part = (geo, m, parent, x = 0, y = 0, z = 0) => { const p = new THREE.Mesh(geo, m); p.position.set(x, y, z); p.castShadow = true; parent.add(p); return p; };
+  const joint = (parent, x = 0, y = 0, z = 0) => { const g = new THREE.Group(); g.position.set(x, y, z); parent.add(g); return g; };
+  const root = new THREE.Group(); root.rotation.order = "YZX"; scene.add(root);
+  part(new THREE.SphereGeometry(0.15, 16, 12), pants, root, 0, 0.02, 0).scale.set(0.9, 0.7, 1.25);
+  const spine = joint(root, 0, 0.02, 0);
+  part(new THREE.CapsuleGeometry(0.155, 0.32, 6, 14), shirt, spine, 0, 0.3, 0).scale.set(0.85, 1, 1.25);
+  const neck = joint(spine, 0, 0.62, 0);
+  part(new THREE.CylinderGeometry(0.05, 0.05, 0.08, 10), skin, neck, 0, 0.03, 0);
+  part(new THREE.SphereGeometry(0.13, 20, 16), skin, neck, 0, 0.15, 0);
+  part(new THREE.SphereGeometry(0.137, 20, 16, 0, TAU, 0, PI * 0.55), hairM, neck, -0.015, 0.165, 0).rotation.z = 0.35;
+  part(new THREE.SphereGeometry(0.018, 8, 8), dark, neck, 0.118, 0.17, 0.045);
+  part(new THREE.SphereGeometry(0.018, 8, 8), dark, neck, 0.118, 0.17, -0.045);
+  part(new THREE.SphereGeometry(0.022, 8, 8), skin, neck, 0.13, 0.13, 0);
+  const arm = side => {
+    const sh = joint(spine, 0, 0.52, 0.215 * side);
+    part(new THREE.CapsuleGeometry(0.05, 0.19, 4, 10), shirt, sh, 0, -0.14, 0);
+    const el = joint(sh, 0, -0.29, 0);
+    part(new THREE.CapsuleGeometry(0.043, 0.17, 4, 10), skin, el, 0, -0.12, 0);
+    part(new THREE.SphereGeometry(0.052, 10, 8), skin, el, 0, -0.26, 0);
+    return { sh, el };
+  };
+  const leg = side => {
+    const hp = joint(root, 0, -0.02, 0.1 * side);
+    part(new THREE.CapsuleGeometry(0.075, 0.3, 4, 10), pants, hp, 0, -0.21, 0);
+    const kn = joint(hp, 0, -0.43, 0);
+    part(new THREE.CapsuleGeometry(0.06, 0.3, 4, 10), pants, kn, 0, -0.2, 0);
+    part(new THREE.BoxGeometry(0.23, 0.075, 0.11), shoe, kn, 0.05, -0.43, 0);
+    return { hp, kn };
+  };
+  const R = { ...arm(1), ...leg(1) };
+  const L = { ...arm(-1), ...leg(-1) };
+  const STAND_Y = 0.915;
+
+  const KEYS = ["sp", "nk", "shR", "shL", "sxR", "sxL", "elR", "elL", "hpR", "hpL", "knR", "knL"];
+  const P = o => Object.fromEntries(KEYS.map(k => [k, o[k] || 0]));
+  const lerpPose = (a, b, k) => Object.fromEntries(KEYS.map(n => [n, lerp(a[n], b[n], k)]));
+  const STAND = P({ elR: 0.12, elL: 0.12, sxR: 0.08, sxL: 0.08 });
+  const TRIP = P({ sp: 0.45, nk: -0.4, shR: 2.3, shL: 2.0, sxR: 0.5, sxL: 0.6, elR: 0.3, elL: 0.5, hpR: 0.9, hpL: -0.35, knR: 0.6, knL: 0.2 });
+  const PRONE = P({ nk: -0.5, shR: 2.8, shL: 2.6, sxR: 0.7, sxL: 0.5, elR: 0.4, elL: 0.6, hpR: 0.05, hpL: -0.1, knR: 0.25, knL: 0.1 });
+  const KNEEL = P({ sp: 0.25, nk: 0.1, shR: 0.4, shL: 0.3, sxR: 0.2, sxL: 0.2, elR: 0.5, elL: 0.5, hpR: 0.1, hpL: 0.1, knR: 1.6, knL: 1.6 });
+  const walkPose = ph => P({ sp: 0.05, hpR: 0.45 * Math.sin(ph), hpL: -0.45 * Math.sin(ph), knR: 0.1 + 0.7 * Math.max(0, -Math.sin(ph + 0.6)), knL: 0.1 + 0.7 * Math.max(0, Math.sin(ph + 0.6)),
+    shR: -0.4 * Math.sin(ph), shL: 0.4 * Math.sin(ph), elR: 0.35, elL: 0.35, sxR: 0.08, sxL: 0.08 });
+  const tumblePose = t => P({ sp: 0.55 + 0.25 * Math.sin(t * 9), nk: 0.35, shR: 1.7 + 1.3 * Math.sin(t * 8), shL: 1.7 + 1.3 * Math.sin(t * 8 + 2.1), sxR: 0.55 + 0.45 * Math.sin(t * 6), sxL: 0.55 + 0.45 * Math.sin(t * 6.5 + 1),
+    elR: 0.9 + 0.6 * Math.sin(t * 10), elL: 0.9 + 0.6 * Math.sin(t * 11 + 1), hpR: 1.2 + 0.7 * Math.sin(t * 7), hpL: 1.1 + 0.7 * Math.sin(t * 7 + 2.4), knR: 1.4 + 0.7 * Math.sin(t * 9 + 1), knL: 1.4 + 0.7 * Math.sin(t * 8.5 + 3) });
+  const cheerPose = t => P({ shR: 3.05, shL: 3.05, sxR: 0.45 + 0.25 * Math.sin(t * 9), sxL: 0.45 + 0.25 * Math.sin(t * 9 + PI), elR: 0.25, elL: 0.25, nk: -0.15 });
+
+  function applyPose(p) {
+    spine.rotation.z = -p.sp; neck.rotation.z = -p.nk;
+    R.sh.rotation.set(-p.sxR, 0, p.shR); L.sh.rotation.set(p.sxL, 0, p.shL);
+    R.el.rotation.z = p.elR; L.el.rotation.z = p.elL;
+    R.hp.rotation.z = p.hpR; L.hp.rotation.z = p.hpL;
+    R.kn.rotation.z = -p.knR; L.kn.rotation.z = -p.knL;
+  }
+
+  // ---------- Timeline ----------
+  const yL1 = H0 - FD, yL2 = H0 - 2 * FD, BODY = 0.42, PRONE_Y = 0.15;
+  const SEGS = [];
+  const seg = (name, dur, fn, extra = {}) => SEGS.push({ name, dur, fn, ...extra });
+  seg("walk", 1.5, (v, t) => { const ph = t * TAU * 1.05; return { x: -1.7 + 1.6 * v, y: H0 + STAND_Y + 0.025 * Math.abs(Math.sin(ph)), z: 0, yaw: 0, pitch: 0, roll: 0, pose: walkPose(ph) }; });
+  seg("trip", 0.45, v => ({ x: -0.1 + 0.35 * v, y: H0 + STAND_Y - 0.4 * v * v, z: 0, yaw: 0, pitch: -1.2 * v * v, roll: 0, pose: TRIP }));
+  const tumble = f => (v, t, st) => {
+    const F = flights[f];
+    return { x: F.x0 + F.d * FL * v, y: F.yTop - FD * v + BODY + 0.3 * Math.abs(Math.sin(PI * 4 * v)), z: F.z,
+      yaw: F.d > 0 ? (f ? TAU : 0) : PI, pitch: st.pitch - TAU * 2.25 * v, roll: 0.3 * Math.sin(t * 5), pose: tumblePose(t) };
+  };
+  seg("flight", 1.7, tumble(0), { flight: 0 });
+  seg("landing", 0.8, (v, t, st) => ({ x: FL + 0.75 * Math.sin(PI * v), y: yL1 + BODY + 0.1 * Math.abs(Math.sin(TAU * v)), z: LANE_B * (1 - Math.cos(PI * v)) / 2,
+    yaw: PI * smooth(v), pitch: st.pitch - TAU * 0.55 * v, roll: 0.2 * Math.sin(t * 4), pose: tumblePose(t) }));
+  seg("flight", 1.7, tumble(1), { flight: 1 });
+  seg("landing", 0.8, (v, t, st) => ({ x: -0.75 * Math.sin(PI * v), y: yL2 + BODY + 0.1 * Math.abs(Math.sin(TAU * v)), z: LANE_B * (1 + Math.cos(PI * v)) / 2,
+    yaw: PI + PI * smooth(v), pitch: st.pitch - TAU * 0.55 * v, roll: 0.2 * Math.sin(t * 4), pose: tumblePose(t) }));
+  seg("flight", 1.7, tumble(2), { flight: 2 });
+  seg("slide", 0.9, (v, t, st) => {
+    let target = st.pitch - posmod(st.pitch + PI / 2, TAU); if (st.pitch - target < 1.2) target -= TAU;
+    return { x: FL + 1.8 * easeOut(v), y: lerp(BODY, PRONE_Y, smooth(v)) + 0.14 * Math.sin(PI * Math.min(1, v * 2)) * (1 - v), z: 0,
+      yaw: TAU, pitch: lerp(st.pitch, target, easeOut(v)), roll: 0.2 * (1 - v) * Math.sin(t * 5), pose: lerpPose(tumblePose(t), PRONE, smooth(v * 1.4)) };
+  });
+  seg("lie", 1.6, (v, t, st) => {
+    const tw = v > 0.45 && v < 0.7 ? Math.sin((v - 0.45) / 0.25 * PI * 3) : 0;
+    return { ...st, roll: 0, pose: { ...PRONE, knR: PRONE.knR + 0.6 * Math.abs(tw), elR: PRONE.elR + 0.3 * Math.abs(tw) } };
+  }, { stars: true });
+  seg("getup", 1.5, (v, t, st) => {
+    const a = smooth(v * 2), b = smooth(v * 2 - 1);
+    return { x: st.x, y: PRONE_Y + (0.5 - PRONE_Y) * a + (STAND_Y - 0.5) * b, z: st.z, yaw: TAU, pitch: st.pitch + (PI / 2) * (0.8 * a + 0.2 * b), roll: 0,
+      pose: v < 0.5 ? lerpPose(PRONE, KNEEL, a) : lerpPose(KNEEL, STAND, b) };
+  }, { stars: true });
+  seg("cheer", 2.2, (v, t, st) => ({ x: st.x, y: STAND_Y + (v < 0.7 ? 0.18 * Math.abs(Math.sin(PI * v / 0.7 * 3)) : 0), z: st.z,
+    yaw: TAU - (PI / 2) * smooth(v * 4), pitch: st.pitch, roll: 0, pose: cheerPose(t) }), { ok: true });
+  seg("hold", 1.0, (v, t, st) => ({ ...st, pose: lerpPose(cheerPose(t), STAND, smooth(v * 2)) }), { ok: true });
+
+  // resolve start/end states once so every segment continues from the last
+  let acc = 0, prevEnd = null;
+  for (const s of SEGS) {
+    s.t0 = acc; s.t1 = acc + s.dur; acc = s.t1;
+    const st = prevEnd || s.fn(0, s.t0, { pitch: 0, x: 0, y: 0, z: 0, yaw: 0, roll: 0, pose: STAND });
+    s.start = st; s.c0 = s.fn(0, s.t0, st);
+    prevEnd = s.fn(1, s.t1, st);
+  }
+  const TOTAL = acc;
+  const BLEND = 0.22;
+  function stateAt(t) {
+    const s = SEGS.find(g => t < g.t1) || SEGS[SEGS.length - 1];
+    const v = clamp((t - s.t0) / s.dur, 0, 1), r = s.fn(v, t, s.start);
+    const k = 1 - smooth((t - s.t0) / BLEND);
+    for (const n of ["x", "y", "z", "yaw", "pitch", "roll"]) r[n] += (s.start[n] - s.c0[n]) * k;
+    r.pose = lerpPose(r.pose, s.start.pose, k);
+    return { s, v, r };
+  }
+
+  // ---------- Effects: dust puffs and dizzy stars ----------
+  const dustMat = new THREE.MeshStandardMaterial({ color: "#d9d4c8", transparent: true, opacity: 0.8, roughness: 1 });
+  const puffs = [];
+  function puff(x, y, z) {
+    for (let i = 0; i < 7; i++) {
+      const m = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 6), dustMat.clone());
+      const a = (i / 7) * TAU; m.position.set(x, y + 0.04, z); m.userData = { vx: Math.cos(a) * 0.9, vz: Math.sin(a) * 0.9, vy: 0.5 + Math.random() * 0.5, life: 1 };
+      scene.add(m); puffs.push(m);
+    }
+  }
+  const starGroup = new THREE.Group(); scene.add(starGroup);
+  const starShape = new THREE.Shape();
+  for (let i = 0; i < 10; i++) { const r = i % 2 ? 0.035 : 0.08, a = (i / 10) * TAU - PI / 2; i ? starShape.lineTo(Math.cos(a) * r, Math.sin(a) * r) : starShape.moveTo(Math.cos(a) * r, Math.sin(a) * r); }
+  const starGeo = new THREE.ExtrudeGeometry(starShape, { depth: 0.02, bevelEnabled: false });
+  for (let i = 0; i < 5; i++) starGroup.add(new THREE.Mesh(starGeo, new THREE.MeshStandardMaterial({ color: "#ffd84a", emissive: "#a67c00", roughness: 0.4 })));
+  const tmp = new THREE.Vector3();
+
+  // ---------- Camera control ----------
+  let az = 0.35, el = 0.32, dist = 5.4, follow = true;
+  const camTarget = new THREE.Vector3(), wanted = new THREE.Vector3();
+  let dragging = null;
+  const cv = renderer.domElement;
+  cv.addEventListener("pointerdown", e => { dragging = { x: e.clientX, y: e.clientY }; cv.setPointerCapture(e.pointerId); });
+  cv.addEventListener("pointermove", e => { if (!dragging) return; az -= (e.clientX - dragging.x) * 0.006; el = clamp(el + (e.clientY - dragging.y) * 0.004, -0.1, 1.3); dragging = { x: e.clientX, y: e.clientY }; });
+  cv.addEventListener("pointerup", () => { dragging = null; });
+  cv.addEventListener("wheel", e => { e.preventDefault(); dist = clamp(dist * (1 + Math.sign(e.deltaY) * 0.08), 2.5, 12); }, { passive: false });
+
+  // ---------- Loop ----------
+  let t = 0, playing = true, speed = 1, last = performance.now(), lastImpact = null, first = true;
+  const okEl = document.getElementById("ok"), prog = document.getElementById("prog");
+  function resize() { const w = stage.clientWidth, h = stage.clientHeight; renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); }
+  window.addEventListener("resize", resize); resize();
+
+  function frame(now) {
+    const dt = Math.min(0.05, (now - last) / 1000); last = now;
+    if (playing) { t += dt * speed; if (t >= TOTAL) { t = 0; first = true; lastImpact = null; } }
+    const { s, v, r } = stateAt(t);
+    root.position.set(r.x, r.y, r.z); root.rotation.set(r.roll, r.yaw, r.pitch); applyPose(r.pose);
+
+    if (s.name === "flight") {
+      const idx = Math.floor(v * 4 + 0.5), key = s.t0 + ":" + idx;
+      if (idx > 0 && key !== lastImpact && Math.abs(v * 4 - idx) < 0.08) { lastImpact = key; const F = flights[s.flight]; puff(r.x, F.yTop - FD * v - 0.05, r.z); }
+    } else if (s.name === "slide" && v > 0.35 && lastImpact !== "slide" + s.t0) { lastImpact = "slide" + s.t0; puff(r.x, 0, r.z); }
+    for (let i = puffs.length - 1; i >= 0; i--) {
+      const m = puffs[i], u = m.userData; u.life -= dt * 1.6;
+      if (u.life <= 0) { scene.remove(m); m.geometry.dispose(); m.material.dispose(); puffs.splice(i, 1); continue; }
+      m.position.x += u.vx * dt; m.position.z += u.vz * dt; m.position.y += u.vy * dt; m.scale.setScalar(1 + (1 - u.life) * 2.5); m.material.opacity = u.life * 0.7;
+    }
+    const showStars = s.stars && !(s.name === "getup" && v > 0.55);
+    starGroup.visible = !!showStars;
+    if (showStars) {
+      neck.localToWorld(tmp.set(0, 0.15, 0));
+      starGroup.children.forEach((st, i) => { const a = now / 400 + (i / 5) * TAU; st.position.set(tmp.x + Math.cos(a) * 0.26, tmp.y + 0.2 + Math.sin(a * 2) * 0.03, tmp.z + Math.sin(a) * 0.26); st.rotation.y = a * 2; });
+    }
+    okEl.classList.toggle("show", !!s.ok);
+    prog.style.width = (t / TOTAL) * 100 + "%";
+
+    wanted.set(r.x, r.y + 0.2, r.z);
+    if (!follow) wanted.set(1.4, 2.0, Z_MID);
+    const k = first ? 1 : 1 - Math.exp(-dt * 3.5);
+    camTarget.lerp(wanted, k); first = false;
+    const d = follow ? dist : dist * 1.7;
+    camera.position.set(camTarget.x + Math.sin(az) * Math.cos(el) * d, camTarget.y + Math.sin(el) * d, camTarget.z + Math.cos(az) * Math.cos(el) * d);
+    camera.lookAt(camTarget);
+    renderer.render(scene, camera);
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+
+  // ---------- Controls ----------
+  const playBtn = document.getElementById("playBtn");
+  playBtn.onclick = () => { playing = !playing; playBtn.textContent = playing ? "Pause" : "Play"; playBtn.setAttribute("aria-label", playBtn.textContent); };
+  document.getElementById("replayBtn").onclick = () => { t = 0; first = true; lastImpact = null; if (!playing) playBtn.click(); };
+  const slowBtn = document.getElementById("slowBtn");
+  slowBtn.onclick = () => { speed = speed === 1 ? 0.35 : 1; slowBtn.setAttribute("aria-pressed", speed !== 1); };
+  const camBtn = document.getElementById("camBtn");
+  camBtn.onclick = () => { follow = !follow; camBtn.setAttribute("aria-pressed", follow); };
+  window.stairTumble = { seek(s) { t = clamp(s, 0, TOTAL - 0.01); first = true; lastImpact = null; }, get duration() { return TOTAL; } };
+  document.addEventListener("keydown", e => { if (e.key === " " && e.target.tagName !== "BUTTON") { e.preventDefault(); playBtn.click(); } });
+})();
+</script>
+</body>
+</html>
