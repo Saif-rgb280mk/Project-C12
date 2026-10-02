@@ -1,0 +1,629 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"></head>
+<body>
+<title>MarketMind</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a trading desk. Header with the clock, then three columns (tickers | chart + order ticket | rivals + newswire) that stack on phones. */
+:root {
+  --bg: #EDF0F5; --panel: #FFFFFF; --ink: #172033; --muted: #5B6478; --line: #D8DEE8;
+  --accent: #3446D1; --accent-ink: #FFFFFF;
+  --up: #0B8457; --down: #CC3B31;
+  --p-you: #3446D1; --p-nana: #A86B12; --p-max: #C23A78; --p-quant: #127E8C;
+  --shade: rgba(23, 32, 51, 0.05);
+  --f-display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --f-body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0D1220; --panel: #151B2B; --ink: #E7EBF3; --muted: #939DB2; --line: #28314A;
+  --accent: #8D9BFF; --accent-ink: #0D1220;
+  --up: #3CCB8F; --down: #FF6C60;
+  --p-you: #8D9BFF; --p-nana: #E0A445; --p-max: #F070AE; --p-quant: #3CC4D4;
+  --shade: rgba(231, 235, 243, 0.05); color-scheme: dark;
+} }
+:root[data-theme="dark"] {
+  --bg: #0D1220; --panel: #151B2B; --ink: #E7EBF3; --muted: #939DB2; --line: #28314A;
+  --accent: #8D9BFF; --accent-ink: #0D1220;
+  --up: #3CCB8F; --down: #FF6C60;
+  --p-you: #8D9BFF; --p-nana: #E0A445; --p-max: #F070AE; --p-quant: #3CC4D4;
+  --shade: rgba(231, 235, 243, 0.05); color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { background: var(--bg); color: var(--ink); font: 14px/1.5 var(--f-body); }
+.wrap { max-width: 1320px; margin: 0 auto; padding-inline: 16px; padding-block: 16px 40px; display: grid; gap: 14px; }
+.num { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+.up { color: var(--up); } .down { color: var(--down); }
+.label { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+
+header { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 24px; }
+.brand h1 { font: 800 30px/1 var(--f-display); margin: 0; letter-spacing: -.02em; }
+.brand p { margin: 4px 0 0; color: var(--muted); }
+.clock { margin-left: auto; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.daybox { min-width: 170px; }
+.daybox .num { font-size: 18px; font-weight: 500; }
+.bar { height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; margin-top: 4px; }
+.bar i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .3s; }
+button { font: 600 14px var(--f-body); border-radius: 8px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); padding: 8px 14px; cursor: pointer; }
+button:hover { border-color: var(--muted); }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+button:disabled { opacity: .45; cursor: not-allowed; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.seg button { border: 0; border-radius: 0; padding: 8px 10px; background: var(--panel); }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
+
+.grid { display: grid; grid-template-columns: 250px minmax(0, 1fr) 320px; gap: 14px; align-items: start; }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px; min-width: 0; }
+.col { display: grid; gap: 14px; min-width: 0; }
+h2 { font: 700 15px/1.2 var(--f-display); margin: 0 0 10px; letter-spacing: -.01em; }
+
+.tickers { display: grid; gap: 6px; }
+.tk { display: grid; grid-template-columns: 1fr auto; grid-template-rows: auto auto; gap: 0 8px; text-align: left; padding: 9px 10px; border-radius: 9px; border: 1px solid transparent; background: transparent; }
+.tk:hover { background: var(--shade); border-color: var(--line); }
+.tk[aria-pressed="true"] { border-color: var(--accent); background: var(--shade); }
+.tk .sym { font: 600 14px var(--f-mono); }
+.tk .nm { font-size: 12px; color: var(--muted); font-weight: 400; }
+.tk .px { text-align: right; font: 500 14px var(--f-mono); }
+.tk .ch { text-align: right; font: 400 12px var(--f-mono); }
+.tk canvas { grid-column: 1 / -1; width: 100%; height: 26px; margin-top: 4px; }
+
+.chart-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; }
+.chart-head .big { font: 800 32px/1 var(--f-display); }
+.chart-head .co { color: var(--muted); }
+.chart-wrap { position: relative; height: 330px; margin-top: 10px; }
+.chart-wrap canvas { width: 100%; height: 100%; display: block; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 12px; color: var(--muted); margin-top: 6px; }
+.legend span::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: 1px; background: var(--c); }
+.legend span.tri::before { border-radius: 0; clip-path: polygon(50% 0, 100% 100%, 0 100%); }
+
+.ticket { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line); }
+.order { display: grid; gap: 8px; }
+.qtyrow { display: flex; gap: 6px; }
+.qtyrow input { flex: 1; min-width: 0; font: 500 16px var(--f-mono); padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); }
+.btnrow { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.btn-buy { background: var(--up); border-color: var(--up); color: var(--panel); }
+.btn-sell { background: var(--down); border-color: var(--down); color: var(--panel); }
+.msg { min-height: 21px; font-size: 13px; color: var(--muted); }
+.msg.err { color: var(--down); }
+.acct { display: grid; gap: 4px; align-content: start; }
+.kv { display: flex; justify-content: space-between; gap: 8px; }
+.kv b { font: 500 14px var(--f-mono); font-variant-numeric: tabular-nums; }
+.hold { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 6px; }
+.hold td, .hold th { padding: 4px 0; border-bottom: 1px solid var(--line); text-align: right; }
+.hold td:first-child, .hold th:first-child { text-align: left; }
+.hold th { font-weight: 600; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+
+.board { display: grid; gap: 4px; }
+.row { display: grid; grid-template-columns: 22px 1fr auto; gap: 2px 10px; align-items: center; padding: 8px 6px; border-radius: 8px; }
+.row.me { background: var(--shade); }
+.row .rk { font: 800 16px var(--f-display); color: var(--muted); }
+.row .who { font-weight: 600; display: flex; align-items: center; gap: 7px; }
+.row .who::before { content: ""; width: 9px; height: 9px; border-radius: 50%; background: var(--c); flex: none; }
+.row .style { grid-column: 2 / -1; font-size: 12px; color: var(--muted); }
+.row .val { text-align: right; font: 500 14px var(--f-mono); }
+.row .val small { display: block; font-size: 12px; }
+.race { height: 150px; margin-top: 8px; }
+.race canvas { width: 100%; height: 100%; display: block; }
+
+.wire { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; max-height: 300px; overflow-y: auto; }
+.wire li { display: grid; grid-template-columns: auto 1fr; gap: 0 10px; font-size: 13px; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
+.wire .d { font: 400 12px var(--f-mono); color: var(--muted); padding-top: 1px; }
+.wire .tag { font: 600 11px var(--f-mono); padding: 0 5px; border-radius: 4px; margin-right: 4px; border: 1px solid currentColor; }
+.wire li.new { animation: flash 1.2s ease-out; }
+@keyframes flash { from { background: var(--shade); } to { background: transparent; } }
+.empty { color: var(--muted); font-size: 13px; }
+
+.overlay { position: fixed; inset: 0; background: rgba(8, 12, 22, .55); display: grid; place-items: center; padding: 16px; z-index: 10; }
+.report { background: var(--panel); color: var(--ink); border-radius: 16px; border: 1px solid var(--line); max-width: 640px; width: 100%; max-height: 90vh; overflow-y: auto; padding: 24px; display: grid; gap: 14px; }
+.report h2 { font-size: 28px; margin: 0; text-wrap: balance; }
+.report .place { font: 800 64px/1 var(--f-display); color: var(--accent); }
+.report ul { margin: 0; padding-left: 18px; display: grid; gap: 8px; }
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; }
+.stats div { border: 1px solid var(--line); border-radius: 10px; padding: 10px; }
+.stats b { display: block; font: 500 18px var(--f-mono); margin-top: 2px; }
+.keys { font-size: 12px; color: var(--muted); }
+kbd { font: 500 11px var(--f-mono); border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; }
+
+@media (max-width: 1080px) { .grid { grid-template-columns: 220px minmax(0, 1fr); } .grid > .col:last-child { grid-column: 1 / -1; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); } }
+@media (max-width: 720px) {
+  .grid { grid-template-columns: minmax(0, 1fr); }
+  .tickers { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
+  .clock { margin-left: 0; }
+  .chart-wrap { height: 250px; }
+}
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="brand">
+      <h1>MarketMind</h1>
+      <p>60 trading days, $10,000 each. Can you beat three AI traders?</p>
+    </div>
+    <div class="clock">
+      <div class="daybox">
+        <div class="label">Trading day</div>
+        <div class="num" id="dayText">Day 0 of 60</div>
+        <div class="bar"><i id="dayBar"></i></div>
+      </div>
+      <button class="primary" id="playBtn">Open the market</button>
+      <div class="seg" role="group" aria-label="Speed">
+        <button data-speed="1" aria-pressed="true">1×</button>
+        <button data-speed="2" aria-pressed="false">2×</button>
+        <button data-speed="4" aria-pressed="false">4×</button>
+      </div>
+      <button id="newBtn">New market</button>
+    </div>
+  </header>
+
+  <div class="grid">
+    <section class="panel" aria-label="Stocks">
+      <h2>Stocks</h2>
+      <div class="tickers" id="tickers"></div>
+    </section>
+
+    <section class="panel" aria-label="Chart and order ticket">
+      <div class="chart-head">
+        <span class="big num" id="cPrice">$0.00</span>
+        <span class="num" id="cChange"></span>
+        <span class="co" id="cName"></span>
+      </div>
+      <div class="chart-wrap"><canvas id="chart" aria-label="Price chart"></canvas></div>
+      <div class="legend">
+        <span style="--c: var(--up)">Good news</span>
+        <span style="--c: var(--down)">Bad news</span>
+        <span class="tri" style="--c: var(--p-you)">Your buys and sells</span>
+      </div>
+
+      <div class="ticket">
+        <div class="order">
+          <label class="label" for="qty">Shares</label>
+          <div class="qtyrow">
+            <input id="qty" type="number" min="1" step="1" value="10" inputmode="numeric">
+            <button id="maxBtn" title="Largest amount you can buy or sell">Max</button>
+          </div>
+          <div class="btnrow">
+            <button class="btn-buy" id="buyBtn">Buy</button>
+            <button class="btn-sell" id="sellBtn">Sell</button>
+          </div>
+          <div class="msg" id="msg" role="status"></div>
+          <div class="keys"><kbd>B</kbd> buy · <kbd>S</kbd> sell · <kbd>Space</kbd> pause · <kbd>↑</kbd><kbd>↓</kbd> switch stock</div>
+        </div>
+        <div class="acct">
+          <div class="kv"><span>Cash</span><b id="aCash"></b></div>
+          <div class="kv"><span>Invested</span><b id="aInv"></b></div>
+          <div class="kv"><span>Total value</span><b id="aTotal"></b></div>
+          <table class="hold"><thead><tr><th>Stock</th><th>Shares</th><th>Profit</th></tr></thead><tbody id="holdBody"></tbody></table>
+        </div>
+      </div>
+    </section>
+
+    <div class="col">
+      <section class="panel" aria-label="Leaderboard">
+        <h2>Leaderboard</h2>
+        <div class="board" id="board"></div>
+        <div class="race"><canvas id="race" aria-label="Portfolio value race"></canvas></div>
+      </section>
+      <section class="panel" aria-label="News">
+        <h2>Newswire</h2>
+        <ul class="wire" id="wire"></ul>
+      </section>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="overlay" hidden>
+  <div class="report" role="dialog" aria-modal="true" aria-labelledby="repTitle" id="report"></div>
+</div>
+
+<script>
+(() => {
+  const TOTAL_DAYS = 60, PRE = 25, START_CASH = 10000, FEE = 0.001;
+  const $ = s => document.querySelector(s);
+
+  const STOCK_DEFS = [
+    { sym: "VOLT", name: "VoltCell Batteries", price: 42, vol: 0.028, drift: 0.0012 },
+    { sym: "BYTE", name: "ByteForge AI", price: 118, vol: 0.038, drift: 0.0015 },
+    { sym: "GRWN", name: "GreenRoot Foods", price: 23, vol: 0.014, drift: 0.0006 },
+    { sym: "ORBT", name: "Orbital Freight", price: 67, vol: 0.032, drift: 0.0004 },
+    { sym: "MEDX", name: "Medix Labs", price: 88, vol: 0.024, drift: 0.0009 }
+  ];
+  const GOOD = [
+    "{n} beats earnings forecasts by a mile",
+    "{n} signs a huge deal with a global retailer",
+    "Analysts upgrade {n} to 'strong buy'",
+    "{n} launches a product people are queuing for",
+    "Regulators approve {n}'s new plan",
+    "{n} announces a share buyback"
+  ];
+  const BAD = [
+    "{n} misses sales targets",
+    "{n} CEO resigns unexpectedly",
+    "Recall hits {n} products",
+    "{n} loses a key contract to a rival",
+    "Investigation opened into {n} accounting",
+    "Factory fire slows {n} production"
+  ];
+  const MARKET_GOOD = ["Central bank cuts interest rates: all stocks rise", "Strong jobs report lifts the whole market"];
+  const MARKET_BAD = ["Inflation surprise: the whole market slides", "Global trade worries hit every sector"];
+
+  const AI_INFO = {
+    nana: { name: "Nana Prudence", style: "Careful. Keeps half in cash, buys dips, takes small profits." },
+    max: { name: "Moonshot Max", style: "All-in on whatever is hottest. Chases the news." },
+    quant: { name: "Quant-9", style: "A robot. Splits money evenly and rebalances every 5 days." }
+  };
+
+  let S, timer = null, speed = 1, hover = null;
+
+  const gauss = () => { let u = 0, v = 0; while (!u) u = Math.random(); while (!v) v = Math.random(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); };
+  const money = n => (n < 0 ? "−$" : "$") + Math.abs(n).toLocaleString("en-US", { maximumFractionDigits: 0 });
+  const px = n => "$" + n.toFixed(2);
+  const pct = n => (n >= 0 ? "+" : "−") + Math.abs(n * 100).toFixed(1) + "%";
+  const cls = n => n > 0 ? "up" : n < 0 ? "down" : "";
+  const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+
+  function mkPlayer(id, ai) {
+    return { id, ai, name: id === "you" ? "You" : AI_INFO[id].name, cash: START_CASH, hold: {}, values: [START_CASH], cashShare: [1], trades: [], fees: 0 };
+  }
+
+  function newGame() {
+    stop();
+    const stocks = STOCK_DEFS.map(d => {
+      const s = { ...d, hist: [d.price], events: [] };
+      for (let i = 0; i < PRE; i++) s.hist.push(s.hist[s.hist.length - 1] * Math.exp(d.drift + d.vol * gauss()));
+      return s;
+    });
+    S = {
+      day: 0, stocks, news: [], selected: S ? S.selected : "VOLT", over: false,
+      players: [mkPlayer("you"), mkPlayer("nana", nanaAI), mkPlayer("max", maxAI), mkPlayer("quant", quantAI)]
+    };
+    $("#overlay").hidden = true;
+    $("#playBtn").textContent = "Open the market";
+    $("#playBtn").disabled = false;
+    setMsg("Pick a stock and buy some shares, then open the market.");
+    renderAll(true);
+  }
+
+  const stock = sym => S.stocks.find(s => s.sym === sym);
+  const price = sym => { const h = stock(sym).hist; return h[h.length - 1]; };
+  const ago = (sym, n) => { const h = stock(sym).hist; return h[Math.max(0, h.length - 1 - n)]; };
+  const value = p => p.cash + Object.entries(p.hold).reduce((a, [k, h]) => a + h.qty * price(k), 0);
+
+  function trade(p, sym, qty) {
+    if (!qty) return { ok: false, err: "Enter how many shares." };
+    const pr = price(sym);
+    const h = p.hold[sym] || (p.hold[sym] = { qty: 0, cost: 0 });
+    if (qty > 0) {
+      const cost = qty * pr, fee = cost * FEE;
+      if (cost + fee > p.cash + 1e-6) return { ok: false, err: `Not enough cash. You can afford ${Math.floor(p.cash / (pr * (1 + FEE)))} shares.` };
+      p.cash -= cost + fee; p.fees += fee; h.qty += qty; h.cost += cost;
+      p.trades.push({ day: S.day, i: stock(sym).hist.length - 1, sym, qty, price: pr, realized: 0 });
+    } else {
+      const n = -qty;
+      if (n > h.qty) return { ok: false, err: `You only own ${h.qty} ${sym}.` };
+      const avg = h.cost / h.qty, proceeds = n * pr, fee = proceeds * FEE;
+      const realized = proceeds - fee - avg * n;
+      p.cash += proceeds - fee; p.fees += fee; h.qty -= n; h.cost -= avg * n;
+      p.trades.push({ day: S.day, i: stock(sym).hist.length - 1, sym, qty: -n, price: pr, realized });
+      if (!h.qty) delete p.hold[sym];
+    }
+    return { ok: true };
+  }
+
+  // ---- AI rivals ----
+  function nanaAI(p) {
+    const v = value(p);
+    for (const s of S.stocks) {
+      const h = p.hold[s.sym], pr = price(s.sym);
+      if (h) {
+        const gain = pr / (h.cost / h.qty) - 1;
+        if (gain >= 0.08 || gain <= -0.10) trade(p, s.sym, -h.qty);
+      } else if (pr / ago(s.sym, 3) - 1 < -0.035 && p.cash > v * 0.5) {
+        trade(p, s.sym, Math.floor((v * 0.1) / (pr * (1 + FEE))));
+      }
+    }
+  }
+  function maxAI(p) {
+    const hot = S.news.find(n => n.day === S.day && n.dir > 0 && n.sym);
+    let target = hot ? hot.sym : null;
+    if (!target && S.day % 3 === 1) target = S.stocks.map(s => [s.sym, price(s.sym) / ago(s.sym, 5)]).sort((a, b) => b[1] - a[1])[0][0];
+    if (!target || (p.hold[target] && Object.keys(p.hold).length === 1)) return;
+    for (const k of Object.keys(p.hold)) if (k !== target) trade(p, k, -p.hold[k].qty);
+    trade(p, target, Math.floor(p.cash / (price(target) * (1 + FEE))));
+  }
+  function quantAI(p) {
+    if (S.day % 5 !== 1) return;
+    const v = value(p), target = v * 0.19;
+    const diffs = S.stocks.map(s => [s.sym, Math.trunc((target - (p.hold[s.sym]?.qty || 0) * price(s.sym)) / price(s.sym))]);
+    for (const [k, d] of diffs) if (d < 0) trade(p, k, d);
+    for (const [k, d] of diffs) if (d > 0) trade(p, k, Math.min(d, Math.floor(p.cash / (price(k) * (1 + FEE)))));
+  }
+
+  // ---- one trading day ----
+  function step() {
+    if (S.over) return;
+    S.day++;
+    const shocks = Object.fromEntries(S.stocks.map(s => [s.sym, 0]));
+    if (Math.random() < 0.035) {
+      const dir = Math.random() < 0.5 ? 1 : -1, size = 0.03 + Math.random() * 0.03;
+      for (const k in shocks) shocks[k] += dir * size;
+      const list = dir > 0 ? MARKET_GOOD : MARKET_BAD;
+      S.news.unshift({ day: S.day, dir, sym: null, text: list[Math.floor(Math.random() * list.length)] });
+    }
+    if (Math.random() < 0.2) {
+      const s = S.stocks[Math.floor(Math.random() * S.stocks.length)];
+      const dir = Math.random() < 0.55 ? 1 : -1, size = 0.05 + Math.random() * 0.12;
+      shocks[s.sym] += dir * size;
+      const list = dir > 0 ? GOOD : BAD;
+      S.news.unshift({ day: S.day, dir, sym: s.sym, text: list[Math.floor(Math.random() * list.length)].replace("{n}", s.name), size });
+      s.events.push({ i: s.hist.length, dir });
+    }
+    for (const s of S.stocks) {
+      const last = s.hist[s.hist.length - 1];
+      s.hist.push(Math.max(1, last * Math.exp(s.drift + s.vol * gauss() + shocks[s.sym])));
+    }
+    for (const p of S.players) if (p.ai) p.ai(p);
+    for (const p of S.players) { const v = value(p); p.values.push(v); p.cashShare.push(p.cash / v); }
+    renderAll();
+    if (S.day >= TOTAL_DAYS) endGame();
+  }
+
+  function start() { if (S.over) return; stop(); timer = setInterval(step, 900 / speed); $("#playBtn").textContent = "Pause"; }
+  function stop() { clearInterval(timer); timer = null; if (S && !S.over) $("#playBtn").textContent = S.day ? "Resume" : "Open the market"; }
+
+  // ---- rendering ----
+  function setupCanvas(c) {
+    const r = c.getBoundingClientRect(), d = window.devicePixelRatio || 1;
+    c.width = Math.max(1, r.width * d); c.height = Math.max(1, r.height * d);
+    const ctx = c.getContext("2d"); ctx.setTransform(d, 0, 0, d, 0, 0);
+    return { ctx, w: r.width, h: r.height };
+  }
+
+  function renderTickers(rebuild) {
+    const box = $("#tickers");
+    if (rebuild) {
+      box.innerHTML = S.stocks.map(s => `<button class="tk" data-sym="${s.sym}" aria-pressed="false">
+        <span class="sym">${s.sym}<br><span class="nm">${s.name}</span></span>
+        <span><span class="px num"></span><br><span class="ch num"></span></span>
+        <canvas></canvas></button>`).join("");
+      box.querySelectorAll(".tk").forEach(b => b.onclick = () => { S.selected = b.dataset.sym; renderTickers(); renderChart(); renderTicket(); });
+    }
+    box.querySelectorAll(".tk").forEach(b => {
+      const s = stock(b.dataset.sym), pr = price(s.sym), ch = pr / ago(s.sym, 1) - 1;
+      b.setAttribute("aria-pressed", s.sym === S.selected);
+      b.querySelector(".px").textContent = px(pr);
+      const c = b.querySelector(".ch"); c.textContent = pct(ch); c.className = "ch num " + cls(ch);
+      const { ctx, w, h } = setupCanvas(b.querySelector("canvas"));
+      const data = s.hist.slice(-30), lo = Math.min(...data), hi = Math.max(...data);
+      ctx.strokeStyle = css(data[data.length - 1] >= data[0] ? "--up" : "--down"); ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      data.forEach((v, i) => { const x = (i / (data.length - 1)) * w, y = h - 2 - ((v - lo) / (hi - lo || 1)) * (h - 4); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); });
+      ctx.stroke();
+    });
+  }
+
+  function renderChart() {
+    const s = stock(S.selected), pr = price(s.sym), ch = pr / ago(s.sym, 1) - 1, since = pr / s.hist[PRE] - 1;
+    $("#cPrice").textContent = px(pr);
+    $("#cChange").innerHTML = `<span class="${cls(ch)}">${pct(ch)} today</span> · <span class="${cls(since)}">${pct(since)} this game</span>`;
+    $("#cName").textContent = `${s.name} (${s.sym})`;
+
+    const { ctx, w, h } = setupCanvas($("#chart"));
+    const padL = 8, padR = 58, padT = 14, padB = 22, n = PRE + TOTAL_DAYS + 1;
+    const lo0 = Math.min(...s.hist), hi0 = Math.max(...s.hist), pad = (hi0 - lo0) * 0.12 || 1, lo = lo0 - pad, hi = hi0 + pad;
+    const X = i => padL + (i / (n - 1)) * (w - padL - padR), Y = v => padT + (1 - (v - lo) / (hi - lo)) * (h - padT - padB);
+    const ink = css("--ink"), muted = css("--muted"), line = css("--line"), accent = css("--p-you");
+    ctx.font = `11px ${css("--f-mono")}`;
+
+    // future area and grid
+    ctx.fillStyle = css("--shade"); ctx.fillRect(X(s.hist.length - 1), padT, X(n - 1) - X(s.hist.length - 1), h - padT - padB);
+    for (let k = 0; k <= 4; k++) {
+      const v = lo + ((hi - lo) * k) / 4, y = Y(v);
+      ctx.strokeStyle = line; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(w - padR, y); ctx.stroke();
+      ctx.fillStyle = muted; ctx.textAlign = "left"; ctx.textBaseline = "middle"; ctx.fillText(px(v), w - padR + 6, y);
+    }
+    // day labels
+    ctx.textAlign = "center"; ctx.textBaseline = "top"; ctx.fillStyle = muted;
+    for (const d of [1, 15, 30, 45, 60]) ctx.fillText("Day " + d, X(PRE + d), h - padB + 6);
+    ctx.strokeStyle = muted; ctx.setLineDash([3, 4]); ctx.beginPath(); ctx.moveTo(X(PRE), padT); ctx.lineTo(X(PRE), h - padB); ctx.stroke(); ctx.setLineDash([]);
+    ctx.textAlign = "left"; ctx.fillText("Opening bell", X(PRE) + 5, padT);
+
+    // area + line
+    const up = s.hist[s.hist.length - 1] >= s.hist[PRE], col = css(up ? "--up" : "--down");
+    const grad = ctx.createLinearGradient(0, padT, 0, h - padB);
+    grad.addColorStop(0, col + "38"); grad.addColorStop(1, col + "00");
+    ctx.beginPath(); s.hist.forEach((v, i) => i ? ctx.lineTo(X(i), Y(v)) : ctx.moveTo(X(i), Y(v)));
+    ctx.lineTo(X(s.hist.length - 1), h - padB); ctx.lineTo(X(0), h - padB); ctx.closePath(); ctx.fillStyle = grad; ctx.fill();
+    ctx.beginPath(); s.hist.forEach((v, i) => i ? ctx.lineTo(X(i), Y(v)) : ctx.moveTo(X(i), Y(v)));
+    ctx.strokeStyle = col; ctx.lineWidth = 2; ctx.lineJoin = "round"; ctx.stroke();
+
+    // news markers
+    for (const e of s.events) {
+      ctx.beginPath(); ctx.arc(X(e.i), Y(s.hist[e.i]), 5, 0, Math.PI * 2);
+      ctx.fillStyle = css(e.dir > 0 ? "--up" : "--down"); ctx.fill(); ctx.strokeStyle = css("--panel"); ctx.lineWidth = 2; ctx.stroke();
+    }
+    // your trades
+    for (const t of S.players[0].trades.filter(t => t.sym === s.sym)) {
+      const x = X(t.i), y = Y(t.price), buy = t.qty > 0, o = buy ? 10 : -10;
+      ctx.beginPath(); ctx.moveTo(x, y + o); ctx.lineTo(x - 6, y + o + (buy ? 9 : -9)); ctx.lineTo(x + 6, y + o + (buy ? 9 : -9)); ctx.closePath();
+      ctx.fillStyle = accent; ctx.fill();
+    }
+    // endpoint
+    const lx = X(s.hist.length - 1), ly = Y(pr);
+    ctx.beginPath(); ctx.arc(lx, ly, 4, 0, Math.PI * 2); ctx.fillStyle = col; ctx.fill();
+
+    // hover
+    if (hover !== null) {
+      const i = Math.round(((hover - padL) / (w - padL - padR)) * (n - 1));
+      if (i >= 0 && i < s.hist.length) {
+        const x = X(i), y = Y(s.hist[i]);
+        ctx.strokeStyle = muted; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(x, padT); ctx.lineTo(x, h - padB); ctx.stroke();
+        ctx.beginPath(); ctx.arc(x, y, 4, 0, Math.PI * 2); ctx.fillStyle = ink; ctx.fill();
+        const label = `${i < PRE ? "Before the game" : "Day " + (i - PRE)} · ${px(s.hist[i])}`;
+        const tw = ctx.measureText(label).width + 14, tx = Math.min(Math.max(x - tw / 2, padL), w - padR - tw);
+        ctx.fillStyle = ink; ctx.fillRect(tx, padT + 16, tw, 22);
+        ctx.fillStyle = css("--panel"); ctx.textAlign = "left"; ctx.textBaseline = "middle"; ctx.fillText(label, tx + 7, padT + 27);
+      }
+    }
+  }
+
+  function renderTicket() {
+    const me = S.players[0], v = value(me);
+    $("#aCash").textContent = money(me.cash);
+    $("#aInv").textContent = money(v - me.cash);
+    $("#aTotal").innerHTML = `${money(v)} <span class="${cls(v - START_CASH)}">${pct(v / START_CASH - 1)}</span>`;
+    const rows = Object.entries(me.hold).map(([k, h]) => {
+      const pl = h.qty * price(k) - h.cost;
+      return `<tr><td class="num">${k}</td><td class="num">${h.qty}</td><td class="num ${cls(pl)}">${money(pl)}</td></tr>`;
+    });
+    $("#holdBody").innerHTML = rows.join("") || `<tr><td colspan="3" class="empty" style="text-align:left">You don't own any shares yet.</td></tr>`;
+    const busy = S.over;
+    $("#buyBtn").disabled = $("#sellBtn").disabled = $("#maxBtn").disabled = busy;
+  }
+
+  function renderBoard() {
+    const ranked = [...S.players].sort((a, b) => value(b) - value(a));
+    $("#board").innerHTML = ranked.map((p, i) => {
+      const v = value(p), r = v / START_CASH - 1;
+      return `<div class="row ${p.id === "you" ? "me" : ""}" style="--c: var(--p-${p.id})">
+        <span class="rk">${i + 1}</span><span class="who">${p.name}</span>
+        <span class="val">${money(v)}<small class="${cls(r)}">${pct(r)}</small></span>
+        <span class="style">${p.ai ? AI_INFO[p.id].style : "That's you. Trade with the ticket."}</span></div>`;
+    }).join("");
+
+    const { ctx, w, h } = setupCanvas($("#race"));
+    const all = S.players.flatMap(p => p.values), lo = Math.min(...all, START_CASH * 0.97), hi = Math.max(...all, START_CASH * 1.03);
+    const X = i => 4 + (i / TOTAL_DAYS) * (w - 8), Y = v => 6 + (1 - (v - lo) / (hi - lo)) * (h - 12);
+    ctx.strokeStyle = css("--line"); ctx.setLineDash([3, 4]); ctx.beginPath(); ctx.moveTo(0, Y(START_CASH)); ctx.lineTo(w, Y(START_CASH)); ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillStyle = css("--muted"); ctx.font = `10px ${css("--f-mono")}`; ctx.textBaseline = "bottom"; ctx.fillText("$10,000 start", 4, Y(START_CASH) - 2);
+    for (const p of [...S.players].reverse()) {
+      ctx.strokeStyle = css("--p-" + p.id); ctx.lineWidth = p.id === "you" ? 2.5 : 1.5;
+      ctx.beginPath(); p.values.forEach((v, i) => i ? ctx.lineTo(X(i), Y(v)) : ctx.moveTo(X(i), Y(v))); ctx.stroke();
+    }
+  }
+
+  let lastNews = 0;
+  function renderWire() {
+    const items = S.news.slice(0, 30);
+    $("#wire").innerHTML = items.length ? items.map((n, i) => `<li class="${i < S.news.length - lastNews ? "new" : ""}"><span class="d">D${n.day}</span>
+      <span>${n.sym ? `<span class="tag ${n.dir > 0 ? "up" : "down"}">${n.sym}</span>` : `<span class="tag ${n.dir > 0 ? "up" : "down"}">MKT</span>`}${n.text}</span></li>`).join("")
+      : `<li class="empty">Headlines appear here once trading starts. Big news moves prices, so watch it.</li>`;
+    lastNews = S.news.length;
+  }
+
+  function renderAll(rebuild) {
+    $("#dayText").textContent = `Day ${S.day} of ${TOTAL_DAYS}`;
+    $("#dayBar").style.width = (S.day / TOTAL_DAYS) * 100 + "%";
+    renderTickers(rebuild); renderChart(); renderTicket(); renderBoard(); renderWire();
+  }
+
+  function setMsg(t, err) { const m = $("#msg"); m.textContent = t; m.className = "msg" + (err ? " err" : ""); }
+
+  function doTrade(sign) {
+    if (S.over) return;
+    const q = Math.floor(Number($("#qty").value));
+    if (!(q > 0)) return setMsg("Enter a whole number of shares above 0.", true);
+    const r = trade(S.players[0], S.selected, sign * q);
+    if (!r.ok) return setMsg(r.err, true);
+    setMsg(`${sign > 0 ? "Bought" : "Sold"} ${q} ${S.selected} at ${px(price(S.selected))}.`);
+    S.players[0].values[S.players[0].values.length - 1] = value(S.players[0]);
+    renderChart(); renderTicket(); renderBoard();
+  }
+
+  // ---- end of game report ----
+  function endGame() {
+    stop(); S.over = true;
+    $("#playBtn").textContent = "Market closed"; $("#playBtn").disabled = true;
+    const me = S.players[0], ranked = [...S.players].sort((a, b) => value(b) - value(a));
+    const place = ranked.indexOf(me) + 1, v = value(me), ret = v / START_CASH - 1, winner = ranked[0];
+    const sells = me.trades.filter(t => t.qty < 0);
+    const best = sells.reduce((a, t) => (!a || t.realized > a.realized ? t : a), null);
+    const worst = sells.reduce((a, t) => (!a || t.realized < a.realized ? t : a), null);
+    const avgCash = me.cashShare.slice(1).reduce((a, b) => a + b, 0) / TOTAL_DAYS;
+    const perf = S.stocks.map(s => [s.sym, price(s.sym) / s.hist[PRE] - 1]).sort((a, b) => b[1] - a[1]);
+    const lessons = [];
+
+    if (!me.trades.length) lessons.push("You never traded, so your money stayed at $10,000. To win you have to take some risk.");
+    else {
+      if (avgCash > 0.5) lessons.push(`On average ${Math.round(avgCash * 100)}% of your money sat in cash. Cash is safe, but it can't grow.`);
+      if (me.trades.length > 25) lessons.push(`You made ${me.trades.length} trades and paid ${money(me.fees)} in fees. Trading a lot rarely pays off.`);
+      if (worst && worst.realized < -150) lessons.push(`Your worst sale was ${worst.sym} on day ${worst.day}, which lost ${money(-worst.realized)}. Selling after a drop locks in the loss.`);
+      if (best && best.realized > 150) lessons.push(`Your best sale was ${best.sym} on day ${best.day}, which made ${money(best.realized)}. That's the kind of move to repeat.`);
+      const maxConc = Math.max(...Object.entries(me.hold).map(([k, h]) => (h.qty * price(k)) / v), 0);
+      if (maxConc > 0.7) lessons.push(`${Math.round(maxConc * 100)}% of your money ended in one stock. If it crashes, you crash with it.`);
+    }
+    lessons.push(`Best stock this game: ${perf[0][0]} (${pct(perf[0][1])}). Worst: ${perf[perf.length - 1][0]} (${pct(perf[perf.length - 1][1])}). Buying ${perf[0][0]} on day 1 and holding would have ended at ${money(START_CASH * (1 + perf[0][1]))}.`);
+    const why = {
+      you: "You beat all three bots. Your choices worked better than every fixed rule.",
+      nana: "Nana won by staying calm. She only bought after drops and cashed out small wins, so bad news never hurt her much.",
+      max: "Max won because he bet everything on the hottest stock and the hot streak lasted. That's risky: next game the same plan could lose big.",
+      quant: "Quant-9 won by spreading money evenly and rebalancing. Being diversified means no single bad headline can sink you."
+    }[winner.id];
+
+    const titles = ["You beat the machines", "So close. Second place", "Third place. The bots got you", "Last place. The bots won this time"];
+    $("#report").innerHTML = `
+      <div class="label">Market closed · Day ${TOTAL_DAYS}</div>
+      <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap">
+        <div class="place">#${place}</div><h2 id="repTitle">${titles[place - 1]}</h2>
+      </div>
+      <div class="stats">
+        <div><span class="label">Final value</span><b>${money(v)}</b></div>
+        <div><span class="label">Your return</span><b class="${cls(ret)}">${pct(ret)}</b></div>
+        <div><span class="label">Trades</span><b>${me.trades.length}</b></div>
+        <div><span class="label">Winner</span><b style="font-family:var(--f-body);font-size:15px">${winner.name}</b></div>
+      </div>
+      <div><h2 style="font-size:16px">Why ${winner.id === "you" ? "you" : winner.name} won</h2><p style="margin:0">${why}</p></div>
+      <div><h2 style="font-size:16px">What your trades show</h2><ul>${lessons.map(l => `<li>${l}</li>`).join("")}</ul></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="primary" id="againBtn">Play a new market</button><button id="closeBtn">Look at the charts</button></div>`;
+    $("#overlay").hidden = false;
+    $("#againBtn").onclick = newGame;
+    $("#closeBtn").onclick = () => { $("#overlay").hidden = true; };
+    $("#againBtn").focus();
+  }
+
+  // ---- controls ----
+  $("#playBtn").onclick = () => (timer ? stop() : start());
+  $("#newBtn").onclick = newGame;
+  $("#buyBtn").onclick = () => doTrade(1);
+  $("#sellBtn").onclick = () => doTrade(-1);
+  $("#maxBtn").onclick = () => {
+    const me = S.players[0], held = me.hold[S.selected]?.qty || 0, afford = Math.floor(me.cash / (price(S.selected) * (1 + FEE)));
+    $("#qty").value = Math.max(afford, held) || 1;
+    setMsg(`You can buy up to ${afford} or sell up to ${held} ${S.selected}.`);
+  };
+  document.querySelectorAll(".seg button").forEach(b => b.onclick = () => {
+    speed = Number(b.dataset.speed);
+    document.querySelectorAll(".seg button").forEach(x => x.setAttribute("aria-pressed", x === b));
+    if (timer) start();
+  });
+  const chartEl = $("#chart");
+  chartEl.addEventListener("mousemove", e => { hover = e.clientX - chartEl.getBoundingClientRect().left; renderChart(); });
+  chartEl.addEventListener("mouseleave", () => { hover = null; renderChart(); });
+  document.addEventListener("keydown", e => {
+    if (e.target.tagName === "INPUT" && e.key !== "Enter") return;
+    if (!$("#overlay").hidden) return;
+    const k = e.key.toLowerCase();
+    if (k === "b" || (e.key === "Enter" && e.target.id === "qty")) { e.preventDefault(); doTrade(1); }
+    else if (k === "s") doTrade(-1);
+    else if (k === " " && e.target.tagName !== "BUTTON") { e.preventDefault(); timer ? stop() : start(); }
+    else if (k === "arrowdown" || k === "arrowup") {
+      e.preventDefault();
+      const i = S.stocks.findIndex(s => s.sym === S.selected), n = S.stocks.length;
+      S.selected = S.stocks[(i + (k === "arrowdown" ? 1 : n - 1)) % n].sym;
+      renderTickers(); renderChart(); renderTicket();
+    }
+  });
+  let rz; window.addEventListener("resize", () => { clearTimeout(rz); rz = setTimeout(() => renderAll(), 100); });
+  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => renderAll());
+  new MutationObserver(() => renderAll()).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+  if (document.fonts) document.fonts.ready.then(() => renderAll());
+
+  newGame();
+})();
+</script>
+</body>
+</html>
