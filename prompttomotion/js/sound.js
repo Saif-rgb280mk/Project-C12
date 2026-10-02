@@ -13,7 +13,7 @@
 (() => {
   "use strict";
   const AC = window.AudioContext || window.webkitAudioContext;
-  const S = { ctx: null, master: null, bus: null, analyser: null, white: null, brown: null, nodes: [], timers: [], enabled: false, playing: false, take: null, dur: 6, tags: new Set(), sky: "day", prevT: 0, idx: {} };
+  const S = { W: 960, H: 540, ctx: null, master: null, bus: null, analyser: null, white: null, brown: null, nodes: [], timers: [], enabled: false, playing: false, take: null, dur: 6, tags: new Set(), sky: "day", prevT: 0, idx: {} };
   const KNOWN = ["rain", "wind", "sea", "fire", "city", "lightning", "rocket", "car", "ufo", "dragon", "character", "pines", "birds", "bubbles", "confetti", "hearts", "neongrid", "planets", "snow", "fireworks", "warp", "stars", "boat", "fish", "castle"];
   const rnd = (a, b) => a + Math.random() * (b - a);
 
@@ -137,7 +137,7 @@
     if (!S.enabled || !S.bus || !S.playing) { S.prevT = m.t; return; }
     const t = m.t, prev = S.prevT, dur = m.duration; S.prevT = t;
     if (t < prev - 0.35) return;      // looped or scrubbed back
-    if (S.tags.has("character")) { const interval = dur / (2 * Math.max(2, Math.round(dur * 1.4))), i = Math.floor(t / interval), p = Math.floor(prev / interval); if (i !== p && i - p < 3) thud(); }
+    if (S.tags.has("character")) { const cycles = window.PTM_gait ? PTM_gait(S.W, S.H, dur).cycles : Math.max(2, Math.round(dur * 1.4)), interval = dur / (2 * cycles), i = Math.floor(t / interval), p = Math.floor(prev / interval); if (i !== p && i - p < 3) thud(); }   // one thud per foot landing, in step with the picture
     if (S.tags.has("dragon")) { const interval = dur / Math.max(3, Math.round(dur * 1.6)), i = Math.floor(t / interval), p = Math.floor(prev / interval); if (i !== p && i - p < 3) whoosh(); }
     if (S.tags.has("lightning")) for (const at of [0.28, 0.71]) if (crossed("l" + at, prev, t, at * dur + 0.2)) thunder();
     if (S.tags.has("fireworks")) { const i = Math.floor((t - 0.85) / 0.45), p = Math.floor((prev - 0.85) / 0.45); if (t > 0.85 && i !== p && i - p < 3) firework(); }
@@ -153,7 +153,7 @@
       else { applyPlaying(); setTimeout(() => { if (!S.enabled) teardown(); }, 500); }
       return S.enabled;
     },
-    setTake(take, params) { S.take = take; S.dur = params && params.duration || 6; if (S.enabled) build(); },
+    setTake(take, params) { S.take = take; S.dur = params && params.duration || 6; const wh = params && window.PTM_ASPECTS && window.PTM_ASPECTS[params.aspect]; if (wh) { S.W = wh[0]; S.H = wh[1]; } if (S.enabled) build(); },
     onTime,
     tags: () => [...S.tags],
     level() { if (!S.analyser) return 0; const d = new Float32Array(S.analyser.fftSize); S.analyser.getFloatTimeDomainData(d); let e = 0; for (const v of d) e += v * v; return Math.sqrt(e / d.length); },

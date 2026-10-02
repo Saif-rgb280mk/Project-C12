@@ -11,6 +11,7 @@
 
   // ------------------------------------------------------------------ options
   const ASPECTS = { "16:9": [960, 540], "9:16": [540, 960], "1:1": [720, 720] };
+  window.PTM_ASPECTS = ASPECTS;
   const FPS_OPTIONS = [12, 24, 30, 60];
   const CAMERAS = [["static", "Static"], ["push", "Push in"], ["pull", "Pull out"], ["panl", "Pan left"], ["panr", "Pan right"], ["orbit", "Orbit"], ["crane", "Crane"], ["handheld", "Handheld"]];
   const LIGHTS = [["natural", "Natural sunlight", "#fff1d6,#8fb6e8"], ["cinematic", "Cinematic", "#ffb066,#2b6f8f"], ["neon", "Neon glow", "#ff3df2,#22d3ee"], ["golden", "Golden hour", "#ffb45a,#ff6a3a"], ["moonlit", "Moonlit", "#a9c1ff,#3b4a8f"], ["studio", "Studio soft", "#ffffff,#c9d3ea"], ["none", "As drawn", "#7a7f90,#3a3f50"]];
@@ -19,12 +20,15 @@
   const CAM_NAME = Object.fromEntries(CAMERAS), LIGHT_NAME = Object.fromEntries(LIGHTS.map(l => [l[0], l[1]]));
   const DEFAULT_LOOK = { camera: "static", camK: 1, light: "natural", blur: 1, detail: "high", physics: true };
   const normParams = p => Object.assign({}, DEFAULT_LOOK, p);
+  // Viewing preference (not part of an animation): draw the preview at the screen's refresh rate. Downloads always use the chosen frame rate.
+  const prefs = { smooth: true };
+  try { prefs.smooth = localStorage.getItem("ptm-smooth") !== "0"; } catch (e) { /* storage blocked: keep the default */ }
   const STYLES = [
-    { id: "vector", name: "2D Vector", hint: "Flat shapes and bold colour" },
-    { id: "3d", name: "3D Render", hint: "Depth, light and shadow" },
-    { id: "anime", name: "Anime", hint: "Ink outlines, cel shading" },
-    { id: "pixel", name: "Pixel Art", hint: "Chunky pixels, few colours" },
-    { id: "frames", name: "Frame-by-Frame", hint: "Hand-drawn, 8 drawings a second" }
+    { id: "vector", name: "2D Vector", short: "2D", hint: "Flat shapes and bold colour" },
+    { id: "3d", name: "3D Render", short: "3D", hint: "Depth, light and shadow" },
+    { id: "anime", name: "Anime", short: "Anime", hint: "Ink outlines, cel shading" },
+    { id: "pixel", name: "Pixel Art", short: "Pixel", hint: "Chunky pixels, few colours" },
+    { id: "frames", name: "Frame-by-Frame", short: "Hand-drawn", hint: "Hand-drawn, 8 drawings a second" }
   ];
   const STYLE_NAME = Object.fromEntries(STYLES.map(s => [s.id, s.name]));
   // The hero preview plays these in turn, generated live by the real engine as each prompt is typed.
@@ -68,7 +72,7 @@
     load(take, { autoplay = true } = {}) {
       const p = take.params, [W, H] = ASPECTS[p.aspect];
       this.sid = ++SID; this.last = null;
-      const cfg = { sid: this.sid, W, H, fps: p.fps, duration: p.duration, pixel: p.style === "pixel" ? 4 : 1, camera: p.camera || "static", camK: p.camK == null ? 1 : p.camK, light: p.light || "none", blur: p.blur || 0, loop: this.loop, autoplay, title: take.title };
+      const cfg = { sid: this.sid, W, H, fps: p.fps, duration: p.duration, pixel: p.style === "pixel" ? 4 : 1, smooth: prefs.smooth, camera: p.camera || "static", camK: p.camK == null ? 1 : p.camK, light: p.light || "none", blur: p.blur || 0, loop: this.loop, autoplay, title: take.title };
       const f = document.createElement("iframe");
       f.setAttribute("sandbox", "allow-scripts");
       f.title = "Animation preview";
@@ -106,7 +110,7 @@
           break;
         case "time": this.last = m; this.onTime(m); break;
         case "ended": this.onEnded(); break;
-        case "perf": this.onPerf(m.subs); break;
+        case "perf": this.onPerf(m.smooth === false ? false : m.subs); break;
         case "thumb": if (this.thumbWait) { this.thumbWait(m.url); this.thumbWait = null; } break;
         case "export-progress": if (this.exportWait && this.exportWait.onProgress) this.exportWait.onProgress(m.p, m.label); break;
         case "export-done": if (this.exportWait) { this.exportWait.resolve(m); this.exportWait = null; } break;
@@ -131,99 +135,52 @@
   const bringIntoView = (el, block = "center") => { const r = el.getBoundingClientRect(); if (r.top < 70 || r.bottom > innerHeight) el.scrollIntoView({ behavior: reduceMotion() ? "auto" : "smooth", block }); };
   const bytes = n => (n > 1048576 ? (n / 1048576).toFixed(1) + " MB" : Math.max(1, Math.round(n / 1024)) + " KB");
   const metaLine = t => t.params.aspect + " · " + t.params.duration + " s · " + t.params.fps + " fps · " + STYLE_NAME[t.params.style];
-  const lookLine = t => { const p = normParams(t.params); return [LIGHT_NAME[p.light], p.camera === "static" ? "Static camera" : CAM_NAME[p.camera] + " camera", p.blur ? BLURS[p.blur] + " blur" : "No blur"].join(" · "); };
+  const lookLine = t => { const p = normParams(t.params); return [LIGHT_NAME[p.light], CAM_NAME[p.camera], p.blur ? BLURS[p.blur] + " blur" : "No blur"].join(" · "); };
 
   // ------------------------------------------------------------------ state
   let cur = null;                       // the take shown in the viewer (its params are the live settings)
   let engine = "mock", busy = null, repairs = 0, tab = "mine";
   let history = [];
   try { history = JSON.parse(localStorage.getItem(HISTORY_KEY) || "[]").filter(t => t && t.code && t.params).map(t => Object.assign(t, { params: normParams(t.params) })); } catch { history = []; }
+  // Animations made by the offline generator are rebuilt from their prompt when the generator improves, so old saves get fixes too.
+  const rebuilt = [];
+  for (const t of history) if (t.engine === "mock" && t.mv !== PTM_MOCK_VERSION) { try { const m = PTM_mock(String(t.prompt).split(" → ")[0], t.params.style); t.code = m.code; t.sound = { layers: m.analysis.layers, sky: m.analysis.sky }; t.mv = PTM_MOCK_VERSION; rebuilt.push(t); } catch (e) { /* keep the old code */ } }
   const saveHistory = () => {
     for (let n = history.length; n >= 0; n--) {
       try { localStorage.setItem(HISTORY_KEY, JSON.stringify(history.slice(0, n))); return; } catch { /* quota: keep fewer */ }
     }
   };
 
-  // ------------------------------------------------------------------ style card previews (drawn live, in each style)
-  function drawStyleSample(canvas, id) {
-    const w = (canvas.width = 160), h = (canvas.height = 100), c = canvas.getContext("2d");
-    const sky = c.createLinearGradient(0, 0, 0, h); sky.addColorStop(0, "#2a3b8f"); sky.addColorStop(1, "#ff9a6b");
-    c.fillStyle = sky; c.fillRect(0, 0, w, h);
-    const scene = (x, s) => {
-      x.fillStyle = id === "3d" ? "#22314f" : "#2d3d66"; x.beginPath(); x.moveTo(0, 100 * s); x.lineTo(50 * s, 52 * s); x.lineTo(90 * s, 84 * s); x.lineTo(125 * s, 60 * s); x.lineTo(160 * s, 100 * s); x.fill();
-      if (id === "anime" || id === "frames") { x.lineWidth = 2.4 * s; x.strokeStyle = "#0e1226"; x.stroke(); }
-      const cx = 112 * s, cy = 30 * s, r = 15 * s;
-      if (id === "3d") { const g = x.createRadialGradient(cx - 5 * s, cy - 5 * s, 1, cx, cy, r); g.addColorStop(0, "#fff"); g.addColorStop(0.35, "#ffd166"); g.addColorStop(1, "#b5651d"); x.fillStyle = g; }
-      else x.fillStyle = "#ffd166";
-      x.beginPath(); x.arc(cx, cy, r, 0, Math.PI * 2); x.fill();
-      if (id === "anime" || id === "frames") { x.lineWidth = 2.4 * s; x.strokeStyle = "#0e1226"; x.stroke(); }
-      if (id === "anime") { x.fillStyle = "rgba(255,255,255,.9)"; x.beginPath(); x.ellipse(cx - 5 * s, cy - 6 * s, 4 * s, 2 * s, -0.6, 0, Math.PI * 2); x.fill(); }
-    };
-    if (id === "pixel") {
-      const lo = document.createElement("canvas"); lo.width = 40; lo.height = 25;
-      const l = lo.getContext("2d"); const g = l.createLinearGradient(0, 0, 0, 25); g.addColorStop(0, "#2a3b8f"); g.addColorStop(1, "#ff9a6b"); l.fillStyle = g; l.fillRect(0, 0, 40, 25);
-      scene(l, 0.25); c.imageSmoothingEnabled = false; c.drawImage(lo, 0, 0, w, h);
-    } else if (id === "frames") {
-      c.save(); c.translate(1, -1); scene(c, 1); c.restore();
-      c.strokeStyle = "rgba(14,18,38,.45)"; c.lineWidth = 1; c.beginPath(); c.moveTo(8, 92); c.lineTo(70, 88); c.stroke();
-    } else scene(c, 1);
-  }
-
   // ------------------------------------------------------------------ UI: style, aspect, fps, ideas
   function renderControls() {
-    for (const host of [$("#styleGrid")]) {
+    const seg = (host, items, attr, onPick, label) => {
       host.innerHTML = "";
-      for (const s of STYLES) {
-        const b = mk("button", "style-card"); b.type = "button"; b.setAttribute("role", "radio"); b.dataset.style = s.id;
-        const cv = mk("canvas"); drawStyleSample(cv, s.id);
-        b.append(cv, mk("b", "", s.name), mk("span", "", s.hint));
-        b.onclick = () => setParam("style", s.id);
-        host.append(b);
-      }
-    }
-    const asp = $("#aspectSeg"); asp.innerHTML = "";
-    for (const a of Object.keys(ASPECTS)) { const b = mk("button", "", a); b.type = "button"; b.setAttribute("role", "radio"); b.dataset.aspect = a; b.onclick = () => setParam("aspect", a); asp.append(b); }
-    const fps = $("#fpsSeg"); fps.innerHTML = "";
-    for (const f of FPS_OPTIONS) { const b = mk("button", "", f + " fps"); b.type = "button"; b.setAttribute("role", "radio"); b.dataset.fps = f; b.onclick = () => setParam("fps", f); fps.append(b); }
-    const cam = $("#cameraGrid"); cam.innerHTML = "";
-    for (const [id, name] of CAMERAS) { const b = mk("button", "pill", name); b.type = "button"; b.setAttribute("role", "radio"); b.dataset.camera = id; b.onclick = () => setParam("camera", id); cam.append(b); }
-    const lg = $("#lightGrid"); lg.innerHTML = "";
-    for (const [id, name, cols] of LIGHTS) {
-      const b = mk("button", "light-card"); b.type = "button"; b.setAttribute("role", "radio"); b.dataset.light = id; b.style.setProperty("--lg", "linear-gradient(135deg," + cols.split(",")[0] + "," + cols.split(",")[1] + ")");
-      b.append(mk("i"), mk("span", "", name)); b.onclick = () => setParam("light", id); lg.append(b);
-    }
-    const bl = $("#blurSeg"); bl.innerHTML = "";
-    BLURS.forEach((n, i) => { const b = mk("button", "", n); b.type = "button"; b.setAttribute("role", "radio"); b.dataset.blur = i; b.onclick = () => setParam("blur", i); bl.append(b); });
-    const dt = $("#detailSeg"); dt.innerHTML = "";
-    for (const [id, n] of DETAILS) { const b = mk("button", "", n); b.type = "button"; b.setAttribute("role", "radio"); b.dataset.detail = id; b.onclick = () => setParam("detail", id); dt.append(b); }
-    const ideas = $("#ideas"); ideas.innerHTML = "";
-    for (const t of IDEAS.slice(0, 4)) { const b = mk("button", "pill", t); b.type = "button"; b.onclick = () => { setVal($("#prompt"), t); $("#prompt").focus(); }; ideas.append(b); }
-    const hi = $("#heroIdeas"); hi.innerHTML = "";
-    for (const t of IDEAS.slice(0, 3)) { const b = mk("button", "pill", t); b.type = "button"; b.onclick = () => { setVal($("#heroPrompt"), t); }; hi.append(b); }
-    const ls = $("#landingStyles"); ls.innerHTML = "";
-    for (const s of STYLES) {
-      const d = mk("div", "grid gap-2 rounded-2xl border border-line bg-panel p-3"), cv = mk("canvas"); drawStyleSample(cv, s.id);
-      cv.style.cssText = "width:100%;aspect-ratio:16/10;border-radius:10px;display:block";
-      d.append(cv, mk("b", "text-sm", s.name), mk("span", "text-xs text-mute", s.hint)); ls.append(d);
-    }
+      for (const [id, text, tip] of items) { const b = mk("button", "", text); b.type = "button"; b.setAttribute("role", "radio"); b.dataset[attr] = id; if (tip) b.title = tip; b.onclick = () => onPick(id); host.append(b); }
+    };
+    seg($("#styleSeg"), STYLES.map(s => [s.id, s.short, s.hint]), "style", v => setParam("style", v));
+    seg($("#aspectSeg"), Object.keys(ASPECTS).map(a => [a, a]), "aspect", v => setParam("aspect", v));
+    seg($("#fpsSeg"), FPS_OPTIONS.map(f => [String(f), String(f)]), "fps", v => setParam("fps", +v));
+    seg($("#blurSeg"), BLURS.map((n, i) => [String(i), n]), "blur", v => setParam("blur", +v));
+    seg($("#detailSeg"), DETAILS.map(([id, n]) => [id, n]), "detail", v => setParam("detail", v));
+    const fill = (sel, items) => { sel.innerHTML = ""; for (const [id, name] of items) { const o = mk("option", "", name); o.value = id; sel.append(o); } };
+    fill($("#cameraSel"), CAMERAS); fill($("#lightSel"), LIGHTS.map(l => [l[0], l[1]]));
+    $("#cameraSel").onchange = e => setParam("camera", e.target.value);
+    $("#lightSel").onchange = e => setParam("light", e.target.value);
+    $("#surpriseBtn").onclick = () => { const pool = IDEAS.filter(t => t !== $("#prompt").value); setVal($("#prompt"), pool[Math.floor(Math.random() * pool.length)]); $("#prompt").focus(); };
   }
 
   function syncControls() {
-    const p = cur.params;
-    document.querySelectorAll("#styleGrid .style-card").forEach(b => b.setAttribute("aria-checked", b.dataset.style === p.style));
-    document.querySelectorAll("#aspectSeg button").forEach(b => b.setAttribute("aria-checked", b.dataset.aspect === p.aspect));
-    document.querySelectorAll("#fpsSeg button").forEach(b => b.setAttribute("aria-checked", +b.dataset.fps === p.fps));
+    const p = cur.params, on = (sel, attr, val) => document.querySelectorAll(sel).forEach(b => b.setAttribute("aria-checked", String(b.dataset[attr]) === String(val)));
+    on("#styleSeg button", "style", p.style); on("#aspectSeg button", "aspect", p.aspect); on("#fpsSeg button", "fps", p.fps);
+    on("#blurSeg button", "blur", p.blur); on("#detailSeg button", "detail", p.detail);
     $("#duration").value = p.duration; $("#durationOut").textContent = p.duration + " s";
-    document.querySelectorAll("#cameraGrid button").forEach(b => b.setAttribute("aria-checked", b.dataset.camera === p.camera));
-    document.querySelectorAll("#lightGrid button").forEach(b => b.setAttribute("aria-checked", b.dataset.light === p.light));
-    document.querySelectorAll("#blurSeg button").forEach(b => b.setAttribute("aria-checked", +b.dataset.blur === p.blur));
-    document.querySelectorAll("#detailSeg button").forEach(b => b.setAttribute("aria-checked", b.dataset.detail === p.detail));
+    $("#cameraSel").value = p.camera; $("#lightSel").value = p.light;
     $("#camK").value = p.camK; $("#camKOut").textContent = Number(p.camK).toFixed(1) + "×"; $("#camK").disabled = p.camera === "static";
     $("#physics").checked = !!p.physics;
+    $("#lookSummary").textContent = lookLine(cur);
     $("#takeTitle").textContent = cur.title;
-    $("#takeMeta").textContent = metaLine(cur) + " · " + lookLine(cur);
+    $("#takeMeta").textContent = metaLine(cur);
     $("#code").textContent = cur.code.trim();
-    $("#loopBtn").textContent = "Loop: " + (player.loop ? "on" : "off");
     $("#loopBtn").setAttribute("aria-pressed", player.loop);
     updateTimecode(player.last);
   }
@@ -235,7 +192,7 @@
     if (cur.params[key] === value) return;
     cur.params[key] = value;
     if (key === "style") {
-      if (cur.engine === "mock") { const m = PTM_mock(cur.prompt.split(" → ")[0], value); cur.code = m.code; cur.note = m.note; }
+      if (cur.engine === "mock") { const m = PTM_mock(cur.prompt.split(" → ")[0], value); cur.code = m.code; cur.note = m.note; cur.mv = PTM_MOCK_VERSION; }
       $("#styleNote").textContent = cur.engine === "mock" ? "" : "This animation keeps its look. Pick Generate to redraw it in the new style. Pixel Art applies right away.";
     }
     if ((key === "duration" || key === "fps") && player.last) {   // show the new frame count right away, even if the preview is off screen
@@ -256,7 +213,10 @@
     onTime: m => { updateTimecode(m); if (window.PTM_SND) PTM_SND.onTime(m); },
     onError: msg => showError("This animation hit an error: " + msg),
     onEnded: () => setPlayIcon(false),
-    onPerf: () => setStatus("The preview lowered its motion blur to keep the frame rate. Downloads use full quality.")
+    onPerf: info => {
+      if (info === false) { prefs.smooth = false; $("#smooth").checked = false; setStatus("This computer couldn't keep up with smooth preview, so it switched to drawing on your chosen frame rate. Downloads are not affected."); }
+      else setStatus("The preview lowered its motion blur to keep the frame rate. Downloads use full quality.");
+    }
   });
   function setPlayIcon(playing) {
     $("#playIcon").innerHTML = playing ? '<path d="M3 2h4v12H3zM9 2h4v12H9z"/>' : '<path d="M4 2l10 6-10 6z"/>';
@@ -292,7 +252,7 @@
   $("#nextBtn").onclick = () => player.cmd("step", { n: 1 });
   $("#loopBtn").onclick = () => { player.loop = !player.loop; player.cmd("loop", { on: player.loop }); syncControls(); };
   const soundBtn = $("#soundBtn");
-  if (window.PTM_SND && PTM_SND.supported) soundBtn.onclick = async () => { const on = await PTM_SND.toggle(); soundBtn.setAttribute("aria-pressed", on); soundBtn.querySelector("span").textContent = on ? "Sound: on" : "Sound: off"; }; else soundBtn.hidden = true;
+  if (window.PTM_SND && PTM_SND.supported) soundBtn.onclick = async () => { const on = await PTM_SND.toggle(); soundBtn.setAttribute("aria-pressed", on); soundBtn.title = on ? "Sound on (downloads are silent)" : "Sound for the preview (downloads are silent)"; }; else soundBtn.hidden = true;
   $("#fullBtn").onclick = () => { (monitor.requestFullscreen ? monitor.requestFullscreen() : Promise.reject()).catch(() => setStatus("Full screen isn't available here.", "err")); };
   const scrub = $("#scrub");
   scrub.addEventListener("pointerdown", () => { scrubbing = true; });
@@ -310,6 +270,8 @@
   $("#duration").addEventListener("input", e => setParam("duration", +e.target.value));
   $("#camK").addEventListener("input", e => setParam("camK", +e.target.value));
   $("#physics").addEventListener("change", e => setParam("physics", e.target.checked));
+  $("#smooth").checked = prefs.smooth;
+  $("#smooth").addEventListener("change", e => { prefs.smooth = e.target.checked; try { localStorage.setItem("ptm-smooth", prefs.smooth ? "1" : "0"); } catch (err) { /* ignore */ } player.cmd("config", { smooth: prefs.smooth }); heroPlayer.cmd("config", { smooth: prefs.smooth }); });
 
   // ------------------------------------------------------------------ status + busy overlay (a tiny job runner)
   function setStatus(text, kind) { const s = $("#status"); s.textContent = text; s.style.color = kind === "err" ? "var(--err)" : kind === "ok" ? "var(--ok)" : "var(--mute)"; }
@@ -402,6 +364,18 @@ PHYSICS AND MOVEMENT
 - PHYS.spring(s, target, k, d, dt) with s = {x, v}; PHYS.makeChain(n, x, y, len) and PHYS.chain(points, anchorX, anchorY, dt, {gravity, wind, damping, iters}) for verlet cloth and rope; PHYS.ik2(ax, ay, tx, ty, l1, l2, dir) for two-bone legs and arms (returns the knee or elbow {x, y} and the end point {ex, ey}; dir is 1 or -1 for which way the joint bends).
 - Characters need a real walk or run cycle: feet planted on the ground during stance, opposite arm swing, body bob and lean, anticipation before a jump, squash and stretch on landings, and follow-through on cloth and hair. Move joints with easing, never linearly.
 
+GROUND CONTACT (no foot may ever sink into the floor)
+- Choose one ground line, for example groundY = H * 0.84, and draw the floor from there down. Every foot is a shape with a flat sole, and the lowest point of the sole must never be below groundY, in any frame.
+- A planted foot has its sole exactly on groundY: with the shoe drawn around the ankle, put the ankle at groundY minus the sole thickness minus 1 pixel. Never put the ankle itself on groundY, that pushes the shoe into the floor. While a foot swings, lift it along an arc.
+- Legs must be able to reach the planted foot. Use PHYS.hipHeight(l1, l2, stride, bob) for the hip height above the ankle line and keep the stride under 0.6 of the leg length, so PHYS.ik2 never has to clamp.
+- A planted foot is carried backward at exactly the speed the ground or background scrolls (distance scrolled per loop divided by duration), so it grips the floor instead of skating. The swing foot must leave and land with that same velocity: use a smooth curve (Hermite or eased), never a straight jump.
+- Add a soft contact shadow under every planted foot that fades as the foot lifts. On stairs, slopes or platforms, sample the surface height under each foot and plant on that surface.
+- Apply the same rule to any body that touches a surface: hands on a wall, wheels on a road, paws on the ground.
+
+SMOOTHNESS
+- No value may jump from one frame to the next. Every motion segment starts and ends with continuous speed: blend between poses with smoothstep or ease.inOut, never with a straight cut. Add follow-through (cloth, hair, tail) and overlapping action so parts do not all start and stop together.
+- The preview is drawn up to 60 times a second at fractional times, so draw() must accept any t and be continuous in t.
+
 DETAIL
 ${DETAIL_GUIDE[p.detail]}
 
@@ -491,7 +465,7 @@ Reply with ONLY one JSON object and nothing else: {"title": "short title, at mos
         job.next(); out = PTM_mock(prompt, params.style); await sleep(300);
         if (aborted()) throw { code: "cancelled" };
       }
-      const take = { id: uid(), title: out.title, note: out.note, prompt: refineFrom ? refineFrom.prompt.split(" → ")[0] + " → " + change : prompt, params, code: out.code, engine, created: Date.now(), sound: out.analysis ? { layers: out.analysis.layers, sky: out.analysis.sky } : out.sound || null };
+      const take = { id: uid(), title: out.title, note: out.note, prompt: refineFrom ? refineFrom.prompt.split(" → ")[0] + " → " + change : prompt, params, code: out.code, engine, mv: engine === "mock" ? PTM_MOCK_VERSION : undefined, created: Date.now(), sound: out.analysis ? { layers: out.analysis.layers, sky: out.analysis.sky } : out.sound || null };
       const r = await previewWithRepair(take, job, params);
       if (r.message === "replaced") return;
       if (r.ok) { ok = true; job.next(); await finishTake(take); setStatus("Done. Your animation is playing.", "ok"); }
@@ -535,7 +509,7 @@ Reply with ONLY one JSON object and nothing else: {"title": "short title, at mos
     engine = name;
     document.querySelectorAll("#engineSeg button").forEach(b => b.setAttribute("aria-checked", b.dataset.engine === name));
     $("#tierRow").hidden = name !== "claude";
-    $("#engineNote").textContent = name === "claude" ? "Claude writes a new scene for every prompt." : "Mock mode builds a scene from keywords in your prompt. It needs no AI, so it's good for testing.";
+    $("#engineNote").textContent = name === "claude" ? "Claude writes a new scene for every prompt." : "Offline builds a scene from keywords in your prompt. It needs no AI.";
     if (!quiet) setStatus("");
   }
   document.querySelectorAll("#engineSeg button").forEach(b => (b.onclick = () => { if (!b.disabled) setEngine(b.dataset.engine); }));
@@ -641,6 +615,12 @@ Reply with ONLY one JSON object and nothing else: {"title": "short title, at mos
       const r = await p.load(ex, { autoplay: false });
       if (r.ok) { exampleThumbs[ex.id] = await p.thumb(ex.params.duration * 0.4); renderGallery(); }
     }
+    let changed = false;
+    for (const t of rebuilt) {                      // saved animations that were just rebuilt: draw their thumbnails again
+      const r = await p.load(t, { autoplay: false });
+      if (r.ok) { const u = await p.thumb(t.params.duration * 0.4); if (u) { t.thumb = u; changed = true; } }
+    }
+    if (changed) { saveHistory(); renderGallery(); }
     p.destroy(); host.remove();
   }
 
@@ -668,12 +648,7 @@ Reply with ONLY one JSON object and nothing else: {"title": "short title, at mos
   }
   window.PTM_onHeroTyped = heroShow;
 
-  // A slow marquee of prompts: click one to make it.
-  (function marquee() {
-    const track = $("#marqueeTrack"); if (!track) return;
-    const add = () => { for (const t of IDEAS.concat(["Confetti falling and the words \"Happy Birthday\"", "A campfire under the stars", "A girl running through the mountains at sunset", "Snow falling on a quiet pine forest"])) { const b = mk("button", "marq-chip", t); b.type = "button"; b.onclick = () => { setVal($("#prompt"), t); $("#studio").scrollIntoView({ behavior: reduceMotion() ? "auto" : "smooth" }); setTimeout(() => $("#studioForm").requestSubmit(), 450); }; track.append(b); } };
-    add(); add();
-  })();
+
   const heroTake = () => PTM_EXAMPLES.find(e => e.id === "ex-runner") || PTM_EXAMPLES[0];
 
   // ------------------------------------------------------------------ boot

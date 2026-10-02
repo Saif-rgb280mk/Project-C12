@@ -197,6 +197,23 @@ const PTM_SKIES = {
   underwater: { sky: ["#1b6fa8", "#052440"], ground: "#c9b27c", accent: "#ffd166", accent2: "#ff7b54", ink: "#031423" }
 };
 
+// Gait geometry for the running character. It lives out here so the scene (inside the preview) and the sound
+// engine (in the page) agree on cadence. Everything follows from three rules:
+//   1. the sole of a planted foot rests exactly on the ground line,
+//   2. the legs are long enough to reach every planted foot, so the knee never locks out,
+//   3. a planted foot moves back at exactly the speed the road scrolls, so it never skates.
+// D is how far the road scrolls in one loop. With the foot speed = D / duration, one stride cycle covers 4 * stride.
+function PTM_gait(W, H, dur) {
+  const U = Math.min(H * 0.36, W * 0.5), P = W * 1.6, L = U * 0.49;
+  const c0 = Math.max(2, Math.round(dur * 1.4));                       // steps per second the eye finds natural
+  const g = Math.max(1, Math.round((U * 0.23 * 4 * c0) / P));          // laps of the near buildings the road covers per loop
+  const cycles = Math.max(c0, Math.ceil((g * P) / (4 * U * 0.28)));    // never ask for a stride longer than 0.28 U
+  const D = g * P, stride = D / (4 * cycles), bob = U * 0.018, sole = U * 0.05;
+  const hv = Math.sqrt(Math.max(0, Math.pow(L * 0.985, 2) - stride * stride)) - bob;   // hip height above the ankle line
+  return { U, P, L, cycles, D, stride, bob, sole, hv, roadSpeed: D / dur };
+}
+
+const PTM_MOCK_VERSION = 3;   // bump when the mock scenes change, so saved mock animations are rebuilt with the fix
 function PTM_mock(prompt, style) {
   const a = PTM_analyze(prompt);
   const cfg = { style, sky: a.sky, layers: a.layers, text: a.text || (a.layers.includes("abstract") ? titleCase(a.prompt.split(" ").slice(0, 4).join(" ")) : ""), palette: PTM_SKIES[a.sky] };
@@ -204,8 +221,8 @@ function PTM_mock(prompt, style) {
   return {
     title: makeTitle(a.prompt),
     note: shown.length ? "Mock preview built from: " + shown.join(", ") + (a.text ? ', plus the text "' + a.text + '"' : "") + "." : "Mock preview: no scene keywords found, so this is an abstract motion loop.",
-    code: sceneSource(mockSceneTemplate, "// Mock scene from PromptToMotion's offline generator (no AI).\nconst CFG = " + JSON.stringify(cfg) + ";\n"),
-    analysis: a
+    code: sceneSource(mockSceneTemplate, "// Mock scene from PromptToMotion's offline generator (no AI).\nconst CFG = " + JSON.stringify(cfg) + ";\n" + PTM_gait.toString() + "\n"),
+    analysis: a, version: PTM_MOCK_VERSION
   };
 }
 
@@ -242,7 +259,17 @@ function heart(ctx, x, y, s) {
   ctx.bezierCurveTo(x + s * 0.5, y - s * 1.1, x + s, y - s * 0.4, x, y + s * 0.3);
 }
 // Draw fn(offsetX) twice so a pattern of width P repeats without a seam.
-function tile(P, off, fn) { const o = -(((off % P) + P) % P); fn(o); fn(o + P); }
+// How a background layer scrolls. Layer speed is a fraction f of the road's speed. Every layer has to move a whole number of
+// its own pattern periods per loop to repeat seamlessly, so the period is chosen as f * D / n and the pattern is stretched to fit.
+function scroll(f, base, W, H, dur, p) {
+  if (!RUN) return { P: base, off: 0, s: 1 };
+  const D = PTM_gait(W, H, dur).D, ff = Math.max(f, (0.8 * W) / D);          // a layer must move at least 0.8 of the frame per loop, or its pattern would have to be squashed flat
+  const n = Math.max(1, Math.round((ff * D) / base)), P = (ff * D) / n;
+  return { P, off: p * ff * D, s: P / base };
+}
+let VW = 960;   // frame width, set at the start of draw()
+// Draw a repeating pattern of period P so that it covers the whole frame, however short the period is.
+function tile(P, off, fn) { const o = -(((off % P) + P) % P), n = Math.ceil(VW / P) + 1; for (let i = 0; i <= n; i++) fn(o + i * P); }
 function mix(a, b, k) { const pa = parseInt(a.slice(1), 16), pb = parseInt(b.slice(1), 16); const c = (s) => Math.round(((pa >> s) & 255) * (1 - k) + ((pb >> s) & 255) * k); return "rgb(" + c(16) + "," + c(8) + "," + c(0) + ")"; }
 function limb(ctx, pts, w, col, hi, L) {
   ctx.lineCap = "round"; ctx.lineJoin = "round";
@@ -255,22 +282,27 @@ function limb(ctx, pts, w, col, hi, L) {
 }
 
 // ---- runner: pose is a pure function of time, so physics (simulate) and drawing agree ----
-const GAIT_CYCLES = (dur) => Math.max(2, Math.round(dur * 1.4));
+const GAIT_CYCLES = dur => 0;   // (kept for old saved scenes; the cadence now comes from PTM_gait)
 function pose(t, W, H, dur) {
-  const p = t / dur, U = Math.min(H * 0.36, W * 0.5), ground = H * 0.84, cx = W * (W > H ? 0.36 : 0.5);
-  const l1 = U * 0.245, l2 = U * 0.245, gait = p * TAU * GAIT_CYCLES(dur);
-  const hipY = ground - (l1 + l2) * 0.9 - Math.cos(gait * 2) * U * 0.025, lean = 0.24 + Math.sin(gait * 2) * 0.02;
+  const G = PTM_gait(W, H, dur), U = G.U, p = t / dur, ground = H * 0.84, cx = W * (W > H ? 0.36 : 0.5);
+  const l1 = U * 0.245, l2 = U * 0.245, gait = p * TAU * G.cycles, stride = G.stride;
+  const groundAnkle = ground - G.sole - 1.5;                           // ankle height when the foot is planted (1.5 px so an outline never dips below)
+  const hipY = groundAnkle - G.hv - Math.cos(gait * 2) * G.bob, lean = 0.24 + Math.sin(gait * 2) * 0.02;
   const foot = leg => {
-    const m = (((gait + leg * Math.PI) % TAU) + TAU) % TAU, stride = U * 0.3;
-    if (m < Math.PI) return { x: cx + stride * (1 - m / Math.PI), y: ground };
-    const q = (m - Math.PI) / Math.PI;
-    return { x: cx - stride + 2 * stride * ease.inOut(q), y: ground - Math.sin(q * Math.PI) * U * 0.2 };
+    const m = (((gait + leg * Math.PI) % TAU) + TAU) % TAU;
+    if (m < Math.PI) return { x: cx + stride * (1 - (2 * m) / Math.PI), y: groundAnkle, ang: 0, planted: true, lift: 0 };            // stance: foot slides back with the road
+    // swing: a Hermite curve from the back of the stride to the front. Its slope at both ends is the slope of the stance
+    // (the foot is carried back by the road at 2 * stride per half cycle), so the foot never stops or snaps at lift-off or landing.
+    const q = (m - Math.PI) / Math.PI, q2 = q * q, q3 = q2 * q, v = -2 * stride;
+    const hx = (2 * q3 - 3 * q2 + 1) * -stride + (q3 - 2 * q2 + q) * v + (-2 * q3 + 3 * q2) * stride + (q3 - q2) * v;
+    const lift = Math.pow(Math.sin(q * Math.PI), 0.75);                                                             // quick rise, soft landing
+    return { x: cx + hx, y: groundAnkle - lift * U * 0.2, ang: -0.35 * Math.sin(q * Math.PI), planted: false, lift };
   };
   const f0 = foot(0), f1 = foot(1), torso = U * 0.3;
   const sx = cx + Math.sin(lean) * torso, sy = hipY - Math.cos(lean) * torso;
   const hx = sx + Math.sin(lean * 0.6) * U * 0.14, hy = sy - Math.cos(lean * 0.6) * U * 0.14, r = U * 0.078;
   const hand = leg => { const th = Math.sin(gait + leg * Math.PI + Math.PI) * 0.95; return { x: sx + Math.sin(th) * U * 0.3 + U * 0.07, y: sy + U * 0.3 - Math.abs(Math.sin(th)) * U * 0.09 }; };
-  return { U, ground, cx, l1, l2, hipY, lean, f: [f0, f1], sx, sy, hx, hy, r, hand: [hand(0), hand(1)], nx: sx - U * 0.01, ny: sy - U * 0.02, bx: hx - r * 0.75, by: hy - r * 0.35 };
+  return { U, ground, groundAnkle, sole: G.sole, stride, roadSpeed: G.roadSpeed, D: G.D, cx, l1, l2, hipY, lean, f: [f0, f1], sx, sy, hx, hy, r, hand: [hand(0), hand(1)], nx: sx - U * 0.01, ny: sy - U * 0.02, bx: hx - r * 0.75, by: hy - r * 0.35 };
 }
 // ---- dragon: flight path, wing flap and fire windows are closed-form; the tail is simulated ----
 const FLAPS = dur => Math.max(3, Math.round(dur * 1.6));
@@ -289,15 +321,16 @@ function castleGeom(W, H) {
 var simulate = (has("character") || has("dragon") || has("castle")) ? function (st, dt, t, info) {
   if (st.scarf) {
     const q = pose(t, info.W, info.H, info.duration);
-    PHYS.chain(st.scarf, q.nx, q.ny, dt, { gravity: 520, wind: -2100 + Math.sin(t * 7) * 380, damping: 0.986, iters: 6 });
-    PHYS.chain(st.hair, q.bx, q.by, dt, { gravity: 260, wind: -1100 + Math.sin(t * 9 + 1) * 250, damping: 0.98, iters: 4 });
+    const w = n => (TAU * Math.max(1, Math.round((n * info.duration) / TAU))) / info.duration;   // gust speeds that fit a whole number of times into the loop
+    PHYS.chain(st.scarf, q.nx, q.ny, dt, { gravity: 520, wind: -2100 + Math.sin(t * w(7)) * 380, damping: 0.986, iters: 6 });
+    PHYS.chain(st.hair, q.bx, q.by, dt, { gravity: 260, wind: -1100 + Math.sin(t * w(9) + 1) * 250, damping: 0.98, iters: 4 });
   }
   if (st.tail) {
     const q = dragonPose(t, info.W, info.H, info.duration), a = dragonAnchors(q), c = st.tail;
     if (Math.hypot(c[0].x - a.rx, c[0].y - a.ry) > q.U * 2) for (let i = 0; i < c.length; i++) { c[i].x = c[i].px = a.rx - i * c[i].len; c[i].y = c[i].py = a.ry; }   // the loop restarts off screen
-    PHYS.chain(c, a.rx, a.ry, dt, { gravity: 260, wind: -1500 + Math.sin(t * 6) * 300, damping: 0.982, iters: 6 });
+    PHYS.chain(c, a.rx, a.ry, dt, { gravity: 260, wind: -1500 + Math.sin(t * (TAU * Math.max(1, Math.round((6 * info.duration) / TAU))) / info.duration) * 300, damping: 0.982, iters: 6 });
   }
-  if (st.flags) { const g = castleGeom(info.W, info.H); st.flags.forEach((f, i) => PHYS.chain(f, g.poles[i].x, g.poles[i].y, dt, { gravity: 150, wind: 1400 + Math.sin(t * 5 + i * 2) * 450, damping: 0.972, iters: 5 })); }
+  if (st.flags) { const g = castleGeom(info.W, info.H); st.flags.forEach((f, i) => PHYS.chain(f, g.poles[i].x, g.poles[i].y, dt, { gravity: 150, wind: 1400 + Math.sin(t * (TAU * Math.max(1, Math.round((5 * info.duration) / TAU))) / info.duration + i * 2) * 450, damping: 0.972, iters: 5 })); }
 } : null;
 
 const L = {
@@ -338,10 +371,10 @@ const L = {
       ctx.fill();
     }
   },
-  mountains(ctx, p, W, H, S, cam, Lt) {
-    [[0.6, "#8fb0c8", 1, 3], [0.7, "#5c7f9a", 2, 5], [0.8, "#3a5670", 4, 7]].forEach(([base, col, laps, freq], li) => {
-      const P = W * 1.5, off = RUN ? p * laps * P : 0, far = CFG.sky === "day" ? col : mix("#1c2a44", "#3e5a7a", li / 2);
-      const edge = mix(far.startsWith("#") ? far : "#5c7f9a", PAL.sky[1], 0.45);
+  mountains(ctx, p, W, H, S, cam, Lt, t, dur) {
+    [[0.6, "#8fb0c8", 0.5, 3], [0.7, "#5c7f9a", 0.58, 5], [0.8, "#3a5670", 0.66, 7]].forEach(([base, col, f, freq0], li) => {
+      const sc = RUN ? scroll(f, W * 1.5, W, H, dur, p) : { P: W * 1.5, off: 0, s: 1 };
+      const P = sc.P, off = sc.off, freq = RUN ? Math.max(1, Math.round(P / (W * 0.5))) : freq0, far = CFG.sky === "day" ? col : mix("#1c2a44", "#3e5a7a", li / 2);
       const g = ctx.createLinearGradient(0, H * (base - 0.2), 0, H);
       g.addColorStop(0, far); g.addColorStop(1, mix("#0b1424", "#2b4058", 0.4));
       const ridge = x => H * base - (Math.sin((x / P) * TAU * freq) * 0.5 + Math.sin((x / P) * TAU * (freq * 2 + 1) + li) * 0.22 + 0.9) * H * 0.13;
@@ -353,18 +386,19 @@ const L = {
         ctx.strokeStyle = "rgba(255,255,255," + (0.16 + li * 0.05) + ")"; ctx.lineWidth = 2; ctx.beginPath();
         for (let x = 0; x <= P + 8; x += 8) (x ? ctx.lineTo(o + x, ridge(x)) : ctx.moveTo(o + x, ridge(x))); ctx.stroke();
       });
-      if (INKED) { ctx.strokeStyle = PAL.ink; ctx.lineWidth = 2; ctx.beginPath(); for (let x = 0; x <= W; x += 8) (x ? ctx.lineTo(x, ridge(x + off)) : ctx.moveTo(x, ridge(x + off))); ctx.stroke(); }
+      if (INKED) { ctx.strokeStyle = PAL.ink; ctx.lineWidth = 2; ctx.beginPath(); const sh = off + cam.x * W * (0.2 + li * 0.25); for (let x = 0; x <= W; x += 8) { const xx = (((x + sh) % P) + P) % P; (x ? ctx.lineTo(x, ridge(xx)) : ctx.moveTo(x, ridge(xx))); } ctx.stroke(); }
       const haze = ctx.createLinearGradient(0, H * (base - 0.16), 0, H * (base + 0.06));
       haze.addColorStop(0, "rgba(255,255,255,0)"); haze.addColorStop(1, "rgba(255,255,255," + (0.16 - li * 0.04) + ")");
       ctx.fillStyle = haze; ctx.fillRect(0, H * (base - 0.16), W, H * 0.22);
     });
   },
-  city(ctx, p, W, H, S, cam, Lt) {
+  city(ctx, p, W, H, S, cam, Lt, t, dur) {
     const night = CFG.sky !== "day", P = DATA.P;
     DATA.city.forEach((layer, li) => {
-      const depth = [0.3, 0.6, 1][li], laps = [1, 2, 4][li], base = H * (RUN ? 0.84 : 0.86) - H * 0.0;
+      const depth = [0.3, 0.6, 1][li], sc = scroll([0.64, 0.78, 0.92][li], P, W, H, dur, p), base = H * (RUN ? 0.84 : 0.86) - H * 0.0;
       const body = night ? mix("#0a0d1c", "#26305a", 0.55 - li * 0.25) : mix("#5b6a80", "#a7b4c8", 0.7 - li * 0.3);
-      tile(P, (RUN ? p * laps * P : 0) - cam.x * W * depth * 0.5, o => {
+      tile(sc.P, sc.off - cam.x * W * depth * 0.5, oo => {
+        ctx.save(); ctx.translate(oo, 0); ctx.scale(sc.s, 1); const o = 0;
         for (const b of layer) {
           const x = o + b.x, y = base - b.h;
           ctx.fillStyle = body; ctx.fillRect(x, y, b.w, b.h + 2);
@@ -377,16 +411,19 @@ const L = {
             else { ctx.fillStyle = "rgba(255,255,255," + (0.12 + 0.18 * Math.abs(Math.sin(p * TAU + ph * 6))) + ")"; ctx.fillRect(x + wx, y + wy, 4, 6); }
           }
         }
+        ctx.restore();
       });
       if (li < 2) { const g = ctx.createLinearGradient(0, base - H * 0.34, 0, base); g.addColorStop(0, "rgba(255,255,255,0)"); g.addColorStop(1, "rgba(" + (night ? "120,130,190" : "255,255,255") + "," + (0.16 - li * 0.06) + ")"); ctx.fillStyle = g; ctx.fillRect(0, base - H * 0.34, W, H * 0.34); }
     });
   },
-  ground(ctx, p, W, H, S, cam, Lt) {
+  ground(ctx, p, W, H, S, cam, Lt, t, dur) {
     const y0 = H * 0.84, night = CFG.sky !== "day";
     const g = ctx.createLinearGradient(0, y0, 0, H); g.addColorStop(0, night ? "#1a2038" : "#6f7686"); g.addColorStop(1, night ? "#0a0d1c" : "#3c4252");
     ctx.fillStyle = g; ctx.fillRect(0, y0, W, H - y0);
     ctx.fillStyle = "rgba(255,255,255," + (night ? 0.14 : 0.3) + ")"; ctx.fillRect(0, y0, W, 2);
-    const P = W * 1.2; tile(P, p * P * 6, o => { for (let i = 0; i < 6; i++) ctx.fillRect(o + i * P / 6, y0 + (H - y0) * 0.45, P / 12, 4); });
+    // lane marks move at exactly the speed the planted foot moves, so the feet grip the road
+    const D = RUN ? PTM_gait(W, H, dur).D : W * 7.2, K = Math.max(2, Math.round(D / (W * 0.24))), sp = D / K;
+    tile(D, p * D, o => { for (let i = 0; i < K; i++) ctx.fillRect(o + i * sp, y0 + (H - y0) * 0.45, sp * 0.42, 4); });
   },
   character(ctx, p, W, H, S, cam, Lt, t, dur) {
     const q = pose(t, W, H, dur), U = q.U, st = S || DATA.init;
@@ -395,9 +432,37 @@ const L = {
     const sh = ctx.createRadialGradient(q.cx - Lt.dx * U * 0.3, q.ground + U * 0.02, 1, q.cx - Lt.dx * U * 0.3, q.ground + U * 0.02, U * 0.55);
     sh.addColorStop(0, Lt.shadow); sh.addColorStop(1, "rgba(0,0,0,0)");
     ctx.save(); ctx.translate(0, q.ground); ctx.scale(1, 0.14); ctx.translate(0, -q.ground); ctx.fillStyle = sh; ctx.fillRect(q.cx - U, q.ground - U, U * 2, U * 2); ctx.restore();
+    // Contact shadows: a small dark oval under each shoe that fades as the foot lifts. They are what tells the eye the foot is on the floor.
+    const legsPre = [0, 1].map(i => PHYS.ik2(q.cx, q.hipY, q.f[i].x, q.f[i].y, q.l1, q.l2, -1));
+    for (let i = 0; i < 2; i++) {
+      const lift = clamp((q.groundAnkle - q.f[i].y) / (U * 0.2), 0, 1);
+      ctx.globalAlpha = (1 - lift) * 0.9; ctx.fillStyle = Lt.shadow; ctx.beginPath(); ctx.ellipse(legsPre[i].ex + U * 0.035, q.ground + U * 0.008, U * (0.1 - 0.04 * lift), U * 0.02, 0, 0, TAU); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+    // Dust kicked up at every footfall. Each puff is born where the foot landed and is carried back by the road, so it is a pure function of time.
+    const G = PTM_gait(W, H, dur), omega = (TAU * G.cycles) / dur, dustCol = CFG.sky === "day" ? "214,200,170" : "150,165,200";
+    for (let i = 0; i < 2; i++) {
+      const m = ((((t * omega) + i * Math.PI) % TAU) + TAU) % TAU, age = m / omega, k = age / 0.55;      // m = 0 is the instant the foot lands
+      if (k >= 1) continue;
+      for (let j = 0; j < 5; j++) {
+        const r0 = hash(j * 3.7 + i * 11.3), px = q.cx + q.stride - G.roadSpeed * age - (r0 * 0.5 + j * 0.12) * U * 0.1, rise = U * (0.01 + 0.07 * k) * (0.5 + hash(j + 4.1)), rad = U * (0.014 + 0.04 * k) * (0.7 + r0 * 0.6);
+        ctx.fillStyle = "rgba(" + dustCol + "," + (0.42 * (1 - k) * (1 - k)) + ")"; ctx.beginPath(); ctx.arc(px, q.ground - rise, rad, 0, TAU); ctx.fill();
+      }
+    }
     // back arm and back leg first
-    const legs = [0, 1].map(i => PHYS.ik2(q.cx, q.hipY, q.f[i].x, q.f[i].y, q.l1, q.l2, -1)), arms = [0, 1].map(i => PHYS.ik2(q.sx, q.sy, q.hand[i].x, q.hand[i].y, U * 0.19, U * 0.19, -1));
-    const leg = i => { limb(ctx, [[q.cx, q.hipY], [legs[i].x, legs[i].y], [legs[i].ex, legs[i].ey]], U * 0.085, pants, hi, Lt); ctx.fillStyle = "#1b1d24"; ctx.beginPath(); ctx.ellipse(legs[i].ex + U * 0.04, legs[i].ey + U * 0.005, U * 0.08, U * 0.036, 0, 0, TAU); ctx.fill(); ink(ctx, 2); };
+    const legs = legsPre, arms = [0, 1].map(i => PHYS.ik2(q.sx, q.sy, q.hand[i].x, q.hand[i].y, U * 0.19, U * 0.19, -1));
+    const leg = i => {
+      limb(ctx, [[q.cx, q.hipY], [legs[i].x, legs[i].y], [legs[i].ex, legs[i].ey]], U * 0.085, pants, hi, Lt);
+      // The shoe is drawn in a frame whose origin is the ankle. Its flat sole is at y = +sole, so with the ankle at
+      // groundAnkle the sole rests on the ground line. While the foot swings, the toe tips up a little.
+      const f = q.f[i], a = q.sole;
+      ctx.save(); ctx.translate(legs[i].ex, legs[i].ey); ctx.rotate(f.ang);
+      ctx.fillStyle = "#1b1d24"; ctx.beginPath();
+      ctx.moveTo(-U * 0.065, -U * 0.03); ctx.lineTo(U * 0.035, -U * 0.034); ctx.quadraticCurveTo(U * 0.115, -U * 0.02, U * 0.135, a - U * 0.014);
+      ctx.lineTo(U * 0.135, a); ctx.lineTo(-U * 0.07, a); ctx.lineTo(-U * 0.07, -U * 0.005); ctx.closePath(); ctx.fill(); ink(ctx, 2);
+      ctx.fillStyle = "rgba(255,255,255,0.22)"; ctx.fillRect(-U * 0.07, a - U * 0.012, U * 0.205, U * 0.012);   // pale sole edge, so the contact line reads
+      ctx.restore();
+    };
     const arm = i => limb(ctx, [[q.sx, q.sy], [arms[i].x, arms[i].y], [arms[i].ex, arms[i].ey]], U * 0.06, i ? skin : mix("#000000", body, 0.75), hi, Lt);
     leg(1); arm(1);
     // scarf tail streams from the physics chain
@@ -416,12 +481,13 @@ const L = {
     ctx.fillStyle = "rgba(255,255,255,0.8)"; ctx.beginPath(); ctx.arc(q.hx + q.r * 0.45, q.hy - q.r * 0.09, q.r * 0.04, 0, TAU); ctx.fill();
     leg(0); arm(0);
   },
-  pines(ctx, p, W, H, S, cam, Lt) {
+  pines(ctx, p, W, H, S, cam, Lt, t, dur) {
     const night = CFG.sky !== "day", snowy = has("snow"), P = DATA.P;
     const g = ctx.createLinearGradient(0, H * 0.78, 0, H); g.addColorStop(0, snowy ? (night ? "#8da0b8" : "#eef4fb") : (night ? "#0c1d1c" : "#3c6d44")); g.addColorStop(1, snowy ? (night ? "#3a4860" : "#b9c8da") : (night ? "#050d12" : "#1e4029"));
     DATA.pines.forEach((layer, li) => {
-      const depth = [0.35, 0.65, 1][li], laps = [1, 2, 4][li], base = H * (0.8 + li * 0.045), col = mix(night ? "#10302f" : "#4a8a5c", night ? "#04121a" : "#1d4a33", li / 2);
-      tile(P, (RUN ? p * laps * P : 0) - cam.x * W * depth * 0.5, o => {
+      const depth = [0.35, 0.65, 1][li], sc = scroll([0.66, 0.8, 0.95][li], P, W, H, dur, p), base = H * (0.8 + li * 0.045), col = mix(night ? "#10302f" : "#4a8a5c", night ? "#04121a" : "#1d4a33", li / 2);
+      tile(sc.P, sc.off - cam.x * W * depth * 0.5, oo => {
+        ctx.save(); ctx.translate(oo, 0); ctx.scale(sc.s, 1); const o = 0;
         for (const t of layer) {
           const h = t.h, w = h * 0.4, sway = Math.sin(p * TAU * 2 + t.ph) * 0.028 * (1 + li * 0.5);
           ctx.save(); ctx.translate(o + t.x, base); ctx.rotate(sway);
@@ -435,6 +501,7 @@ const L = {
           }
           ctx.restore();
         }
+        ctx.restore();
       });
       const mist = ctx.createLinearGradient(0, base - H * 0.18, 0, base); mist.addColorStop(0, "rgba(200,215,235,0)"); mist.addColorStop(1, "rgba(" + (night ? "110,140,180" : "235,245,255") + "," + (0.2 - li * 0.05) + ")");
       ctx.fillStyle = mist; ctx.fillRect(0, base - H * 0.18, W, H * 0.18);
@@ -744,7 +811,7 @@ function setup(W, H) {
   return st;
 }
 function draw(ctx, t, info) {
-  const { W, H, duration, state } = info, Lt = info.light, cam = info.camera;
+  const { W, H, duration, state } = info, Lt = info.light, cam = info.camera; VW = W;
   let p = info.progress, tt = t;
   if (STYLE === "frames") {
     const drawings = Math.max(1, Math.round(duration * 8)), d = Math.floor(p * drawings);

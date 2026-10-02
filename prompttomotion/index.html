@@ -1,5 +1,5 @@
 <title>PromptToMotion</title>
-<meta name="description" content="Describe an animation in words and get a detailed, looping animation with camera moves, lighting, motion blur and physics. Export MP4, GIF or Lottie.">
+<meta name="description" content="Describe an animation in words and get a detailed, looping animation. Export MP4, GIF or Lottie.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600;700&family=Syne:wght@700;800&display=swap">
@@ -26,18 +26,12 @@
 
 <!-- ============ Header ============ -->
 <header id="siteHeader" class="site-header sticky top-0 z-30">
-  <div class="mx-auto flex max-w-[1240px] items-center gap-4 px-4 py-3">
-    <a href="#top" class="logo-link flex items-center gap-2 font-display text-lg font-extrabold tracking-tight">
-      <svg class="logo-mark" width="28" height="28" viewBox="0 0 26 26" aria-hidden="true"><rect x="1" y="4" width="24" height="18" rx="5" fill="var(--accent)"/><path d="M10.5 9.2v7.6l6.4-3.8z" fill="var(--accent-ink)"/></svg>
+  <div class="mx-auto flex max-w-[1180px] items-center justify-between gap-4 px-4 py-3">
+    <a href="#top" class="flex items-center gap-2 font-display text-lg font-extrabold tracking-tight">
+      <svg width="26" height="26" viewBox="0 0 26 26" aria-hidden="true"><rect x="1" y="4" width="24" height="18" rx="5" fill="var(--accent)"/><path d="M10.5 9.2v7.6l6.4-3.8z" fill="var(--accent-ink)"/></svg>
       PromptToMotion
     </a>
-    <nav class="ml-auto hidden items-center gap-5 text-sm font-medium text-mute sm:flex" aria-label="Sections">
-      <a class="nav-link" href="#controls">Controls</a>
-      <a class="nav-link" href="#styles">Styles</a>
-      <a class="nav-link" href="#how">How it works</a>
-      <a class="nav-link" href="#formats">Formats</a>
-    </nav>
-    <a href="#studio" class="btn btn-primary ml-auto sm:ml-0">Open studio</a>
+    <a href="#studio" class="btn btn-primary">Open studio</a>
   </div>
 </header>
 
@@ -45,36 +39,24 @@
   <!-- ============ Hero ============ -->
   <section id="hero" class="hero relative overflow-hidden">
     <canvas id="heroCanvas" aria-hidden="true"></canvas>
-    <div class="aurora" aria-hidden="true"></div>
-    <div class="orb-glow orb-a" aria-hidden="true"></div>
-    <div class="orb-glow orb-b" aria-hidden="true"></div>
-    <div class="relative mx-auto grid max-w-[1240px] items-center gap-10 px-4 pb-14 pt-10 md:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)] md:gap-12 md:pt-16">
+    <div class="relative mx-auto grid max-w-[1180px] items-center gap-12 px-4 pb-20 pt-14 md:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)] md:pt-20">
       <div class="min-w-0">
-        <p class="label mb-3" data-anim="up">Text to animation</p>
-        <h1 class="font-display text-[clamp(2.1rem,4.6vw,3.8rem)] font-extrabold leading-[1] tracking-tight"><span data-split>Describe it.</span><br><span class="grad-text" data-split>Watch it move.</span></h1>
-        <p class="mt-4 max-w-[48ch] text-[17px] text-mute" data-anim="up">Type a scene in plain words. PromptToMotion draws it in rich detail, with camera moves, cinematic lighting, motion blur and real physics, up to 60 frames a second.</p>
-        <form id="heroForm" class="mt-6 grid gap-3" autocomplete="off" data-anim="up">
+        <h1 class="font-display text-[clamp(2.2rem,4.8vw,3.9rem)] font-extrabold leading-[1.02] tracking-tight"><span data-split>Describe it.</span><br><span class="grad-text" data-split>Watch it move.</span></h1>
+        <p class="mt-5 max-w-[42ch] text-[17px] text-mute" data-anim="up">Type a scene in plain words and get a detailed animation you can play, tweak and download.</p>
+        <form id="heroForm" class="mt-8" autocomplete="off" data-anim="up">
           <label for="heroPrompt" class="sr-only">Describe your animation</label>
-          <div class="flex flex-col gap-2 sm:flex-row">
+          <div class="flex flex-col gap-3 sm:flex-row">
             <div class="gborder relative flex-1">
-              <input id="heroPrompt" class="field field-bare text-[16px]" type="text" maxlength="400" aria-describedby="heroHint">
+              <input id="heroPrompt" class="field field-bare text-[16px]" type="text" maxlength="400" title="Press the right arrow key in the empty box to use the idea that is typing">
               <span id="heroTyper" class="typer" aria-hidden="true"></span>
             </div>
             <button class="btn btn-primary px-6 py-3 text-[15px]" type="submit">Generate</button>
           </div>
-          <p id="heroHint" class="text-xs text-mute">Watch the preview draw each idea as it types. Press → in the empty box to use it.</p>
-          <div class="flex flex-wrap gap-2" id="heroIdeas" aria-label="Example prompts"></div>
         </form>
-        <ul class="mt-6 flex flex-wrap gap-x-6 gap-y-2 text-sm text-mute" data-anim="fade" aria-label="Highlights">
-          <li class="stat"><b class="tc text-ink" data-count="60">60</b> frames a second</li>
-          <li class="stat"><b class="tc text-ink" data-count="7">7</b> lighting looks</li>
-          <li class="stat"><b class="tc text-ink" data-count="8">8</b> camera moves</li>
-          <li class="stat"><b class="tc text-ink" data-count="12">12</b> scene layers to mix</li>
-        </ul>
       </div>
 
-      <div class="relative min-w-0" data-anim="right">
-        <div class="hero-card tilt gborder glow-el" data-tilt="5" id="heroCard">
+      <div class="min-w-0" data-anim="right">
+        <div class="hero-card tilt" data-tilt="4" id="heroCard">
           <div class="monitor fill" id="heroMonitor" style="aspect-ratio:16/9">
             <div class="busy" id="heroBusy" hidden>
               <canvas id="heroOrb" aria-hidden="true"></canvas>
@@ -84,293 +66,215 @@
               </div>
             </div>
           </div>
-          <div class="ticks mt-2 rounded-sm" aria-hidden="true"></div>
-          <div class="flex items-center justify-between gap-3 px-2 pb-1 pt-2 text-[13px]">
+          <div class="flex items-center justify-between gap-3 px-1 pt-3 text-[13px]">
             <span class="flex min-w-0 items-center gap-2"><i class="rec-dot" aria-hidden="true"></i><span class="truncate font-semibold" id="heroTitle">Rooftop runner</span></span>
             <span class="tc shrink-0 text-mute" id="heroTc">00:00.00</span>
           </div>
         </div>
-        <span class="chip-float" data-depth="1.3" style="--d:6s;--r:-4deg;top:-18px;left:-10px">60 FPS</span>
-        <span class="chip-float" data-depth="0.8" style="--d:7s;--r:3deg;top:22%;right:-14px">Orbit camera</span>
-        <span class="chip-float" data-depth="1.1" style="--d:5.5s;--r:-2deg;bottom:16%;left:-18px">Golden hour light</span>
-        <span class="chip-float" data-depth="0.9" style="--d:6.5s;--r:4deg;bottom:-24px;right:26%">Motion blur</span>
       </div>
     </div>
   </section>
 
-  <!-- ============ Prompt marquee ============ -->
-  <section class="marquee" aria-label="Example prompts you can click">
-    <div class="marquee-track" id="marqueeTrack"></div>
-  </section>
-
-  <!-- ============ Cinematic controls ============ -->
-  <section id="controls" class="mx-auto max-w-[1240px] px-4 py-14">
-    <div class="rv mb-8 max-w-[62ch]">
-      <h2 class="font-display text-3xl font-extrabold tracking-tight md:text-4xl">Direct it like a film</h2>
-      <p class="mt-2 text-mute">Every animation gets a virtual camera, a lighting rig, a shutter and a physics engine. Change any of them and the preview updates at once.</p>
-    </div>
-    <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-      <article class="feature rv glow-el tilt" data-tilt="3">
+  <!-- ============ What you can direct ============ -->
+  <section class="mx-auto max-w-[1180px] px-4 py-20">
+    <h2 class="rv font-display text-3xl font-extrabold tracking-tight md:text-4xl">Direct it like a film</h2>
+    <div class="mt-10 grid gap-10 sm:grid-cols-2 lg:grid-cols-4">
+      <div class="rv feature">
         <div class="fx-demo fx-cam" aria-hidden="true"><i class="orbit-path"></i><i class="cam-dot"></i><i class="cam-subject"></i></div>
-        <h3>Camera moves</h3><p>Push in, pull out, pan, orbit, crane or handheld, with an intensity slider.</p>
-      </article>
-      <article class="feature rv glow-el tilt" data-tilt="3">
+        <h3>Camera</h3><p>Push, pan, orbit, crane or handheld.</p>
+      </div>
+      <div class="rv feature">
         <div class="fx-demo fx-light" aria-hidden="true"><i class="light-beam"></i><i class="light-obj"></i></div>
-        <h3>Lighting looks</h3><p>Natural sunlight, cinematic, neon glow, golden hour, moonlit or studio soft.</p>
-      </article>
-      <article class="feature rv glow-el tilt" data-tilt="3">
+        <h3>Lighting</h3><p>Sunlight, cinematic, neon, golden hour.</p>
+      </div>
+      <div class="rv feature">
         <div class="fx-demo fx-blur" aria-hidden="true"><i class="blur-dot"></i><i class="blur-dot b2"></i><i class="blur-dot b3"></i><i class="blur-dot b4"></i></div>
-        <h3>Motion blur</h3><p>Sub-frame blending across a real shutter, in four strengths.</p>
-      </article>
-      <article class="feature rv glow-el tilt" data-tilt="3">
+        <h3>Motion blur</h3><p>Real shutter blur, up to 60 fps.</p>
+      </div>
+      <div class="rv feature">
         <div class="fx-demo fx-phys" aria-hidden="true"><i class="swing s1"></i><i class="swing s2"></i><i class="swing s3"></i></div>
-        <h3>Physics</h3><p>Springs, ropes, hair and cloth are simulated, so they move the way they should.</p>
-      </article>
-    </div>
-  </section>
-
-  <!-- ============ Styles ============ -->
-  <section id="styles" class="mx-auto max-w-[1240px] px-4 py-12">
-    <div class="rv mb-6 max-w-[60ch]">
-      <h2 class="font-display text-3xl font-extrabold tracking-tight md:text-4xl">Five looks for the same idea</h2>
-      <p class="mt-2 text-mute">Pick a style and the same sentence comes out drawn differently. Switch any time.</p>
-    </div>
-    <div class="grid grid-cols-2 gap-3 md:grid-cols-5" id="landingStyles"></div>
-  </section>
-
-  <!-- ============ How it works ============ -->
-  <section id="how" class="mx-auto max-w-[1240px] px-4 py-12">
-    <h2 class="rv mb-8 font-display text-3xl font-extrabold tracking-tight md:text-4xl">From a sentence to a file in three steps</h2>
-    <ol class="grid gap-4 md:grid-cols-3">
-      <li class="rv feature glow-el">
-        <p class="tc text-sm font-medium text-accent">Step 1</p>
-        <h3>Describe</h3>
-        <p>Say what should happen and what should be in it: "A rocket lifts off from a snowy launch pad while stars twinkle."</p>
-      </li>
-      <li class="rv feature glow-el">
-        <p class="tc text-sm font-medium text-accent">Step 2</p>
-        <h3>Tune</h3>
-        <p>Choose a style, length, shape and frame rate. Then set the camera, lighting, motion blur and detail, and ask for changes in your own words.</p>
-      </li>
-      <li class="rv feature glow-el">
-        <p class="tc text-sm font-medium text-accent">Step 3</p>
-        <h3>Export</h3>
-        <p>Scrub frame by frame, loop it, then save it as MP4, GIF or Lottie. Every animation is kept in your history so you can reopen and edit it.</p>
-      </li>
-    </ol>
-  </section>
-
-  <!-- ============ Formats ============ -->
-  <section id="formats" class="mx-auto max-w-[1240px] px-4 py-12">
-    <h2 class="rv mb-6 font-display text-3xl font-extrabold tracking-tight md:text-4xl">Export where it needs to go</h2>
-    <div class="grid gap-4 md:grid-cols-3">
-      <div class="rv feature glow-el"><p class="tc text-2xl font-medium">.mp4</p><h3>Social, slides, video editors</h3><p>Up to 1280 px on the long side at your frame rate, with full motion blur. Browsers that can't record MP4 save WebM instead.</p></div>
-      <div class="rv feature glow-el"><p class="tc text-2xl font-medium">.gif</p><h3>Chat, docs, READMEs</h3><p>Loops forever, 480 px on the long side, up to 24 fps, 256 colours.</p></div>
-      <div class="rv feature glow-el"><p class="tc text-2xl font-medium">.json</p><h3>Lottie for web and apps</h3><p>Plays in any Lottie player. This export is frame images inside the Lottie file, not editable vectors.</p></div>
+        <h3>Physics</h3><p>Cloth, hair and tails that move naturally.</p>
+      </div>
     </div>
   </section>
 
   <!-- ============ Studio ============ -->
-  <section id="studio" class="border-t border-line" style="background: var(--panel2)">
-    <div class="mx-auto max-w-[1240px] px-4 py-10">
-      <div class="mb-6 flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <p class="label">Studio</p>
-          <h2 class="font-display text-3xl font-extrabold tracking-tight md:text-4xl">Make an animation</h2>
-        </div>
-        <p class="text-sm text-mute" id="engineNote"></p>
-      </div>
+  <section id="studio" class="studio-bg">
+    <div class="mx-auto max-w-[1180px] px-4 py-16">
+      <h2 class="font-display text-3xl font-extrabold tracking-tight md:text-4xl">Make an animation</h2>
 
-      <div class="grid items-start gap-5 lg:grid-cols-[minmax(0,380px)_minmax(0,1fr)]">
+      <div class="mt-8 grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,360px)_minmax(0,1fr)]">
         <!-- Controls -->
-        <form id="studioForm" class="grid min-w-0 gap-5 rounded-2xl border border-line bg-panel p-5" autocomplete="off">
+        <form id="studioForm" class="card grid min-w-0 gap-6" autocomplete="off">
           <div class="grid gap-2">
-            <label class="label" for="prompt">Your animation</label>
+            <div class="flex items-baseline justify-between gap-2">
+              <label class="label" for="prompt">Describe your animation</label>
+              <button type="button" class="link-btn" id="surpriseBtn">Surprise me</button>
+            </div>
             <div class="gborder relative">
-              <textarea id="prompt" class="field field-bare min-h-[112px] resize-y" maxlength="600" aria-describedby="promptHint"></textarea>
+              <textarea id="prompt" class="field field-bare min-h-[104px] resize-y" maxlength="600" title="Press the right arrow key in the empty box to use the idea that is typing"></textarea>
               <span id="promptTyper" class="typer typer-area" aria-hidden="true"></span>
             </div>
-            <p id="promptHint" class="text-xs text-mute">Press → in the empty box to use the idea that is typing.</p>
-            <div class="flex flex-wrap gap-2" id="ideas" aria-label="Example prompts"></div>
           </div>
 
           <div class="grid gap-2">
             <span class="label" id="styleLabel">Style</span>
-            <div class="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3" id="styleGrid" role="radiogroup" aria-labelledby="styleLabel"></div>
+            <div class="seg seg-wrap" id="styleSeg" role="radiogroup" aria-labelledby="styleLabel"></div>
             <p class="text-xs text-mute" id="styleNote"></p>
           </div>
 
           <div class="grid gap-4">
             <div class="grid gap-1">
-              <div class="flex items-baseline justify-between"><label class="label" for="duration">Duration</label><span class="tc text-sm" id="durationOut">6 s</span></div>
+              <div class="flex items-baseline justify-between"><label class="label" for="duration">Length</label><span class="tc text-sm" id="durationOut">6 s</span></div>
               <input id="duration" type="range" min="2" max="15" step="1" value="6">
             </div>
-            <div class="grid gap-2">
-              <span class="label" id="aspectLabel">Aspect ratio</span>
-              <div class="seg w-full" id="aspectSeg" role="radiogroup" aria-labelledby="aspectLabel"></div>
-            </div>
-            <div class="grid gap-2">
-              <span class="label" id="fpsLabel">Frame rate (up to 60 fps)</span>
-              <div class="seg w-full" id="fpsSeg" role="radiogroup" aria-labelledby="fpsLabel"></div>
+            <div class="grid gap-4 min-[400px]:grid-cols-2">
+              <div class="grid min-w-0 gap-2"><span class="label" id="aspectLabel">Shape</span><div class="seg w-full" id="aspectSeg" role="radiogroup" aria-labelledby="aspectLabel"></div></div>
+              <div class="grid min-w-0 gap-2"><span class="label" id="fpsLabel">Frame rate</span><div class="seg w-full" id="fpsSeg" role="radiogroup" aria-labelledby="fpsLabel"></div></div>
             </div>
           </div>
 
-          <div class="grid gap-3 border-t border-line pt-4">
-            <div class="flex flex-wrap items-center justify-between gap-2">
-              <span class="label" id="engineLabel">Generator</span>
-              <div class="seg" id="engineSeg" role="radiogroup" aria-labelledby="engineLabel">
-                <button type="button" role="radio" data-engine="claude" aria-checked="false">Claude AI</button>
-                <button type="button" role="radio" data-engine="mock" aria-checked="true">Mock (offline)</button>
-              </div>
-            </div>
-            <div class="flex flex-wrap items-center justify-between gap-2" id="tierRow">
-              <label class="label" for="tier">Thinking time</label>
-              <select id="tier" class="field w-auto">
-                <option value="quick">Fast (about 10 s)</option>
-                <option value="default" selected>Balanced (about 30 s)</option>
-                <option value="complex">Best (a minute or more)</option>
-              </select>
-            </div>
+          <div class="grid gap-3">
             <button class="btn btn-primary w-full py-3 text-[16px]" id="generateBtn" type="submit"><span class="spinner" aria-hidden="true"></span><span class="btn-label">Generate animation</span></button>
             <p class="min-h-[20px] text-sm text-mute" id="status" role="status" aria-live="polite"></p>
           </div>
+
+          <!-- Everything else lives here, folded away -->
+          <details id="advanced" class="adv">
+            <summary><span>Advanced</span><span class="adv-sum" id="lookSummary"></span></summary>
+            <div class="adv-body">
+              <div class="grid gap-4 min-[400px]:grid-cols-2">
+                <div class="grid min-w-0 gap-1.5"><label class="label" for="cameraSel">Camera</label><select id="cameraSel" class="field"></select></div>
+                <div class="grid min-w-0 gap-1.5"><label class="label" for="lightSel">Lighting</label><select id="lightSel" class="field"></select></div>
+              </div>
+              <div class="grid gap-1">
+                <div class="flex items-baseline justify-between"><label class="label" for="camK">Camera strength</label><span class="tc text-sm" id="camKOut">1.0×</span></div>
+                <input id="camK" type="range" min="0.3" max="2" step="0.1" value="1">
+              </div>
+              <div class="grid gap-2"><span class="label" id="blurLabel">Motion blur</span><div class="seg w-full" id="blurSeg" role="radiogroup" aria-labelledby="blurLabel"></div></div>
+              <div class="grid gap-2"><span class="label" id="detailLabel">Detail</span><div class="seg w-full" id="detailSeg" role="radiogroup" aria-labelledby="detailLabel"></div></div>
+              <div class="grid gap-2">
+                <label class="check"><input type="checkbox" id="physics" class="accent-check"> Fluid character physics</label>
+                <label class="check"><input type="checkbox" id="smooth" class="accent-check" checked> Smooth preview</label>
+              </div>
+              <div class="grid gap-2 border-t border-line pt-4">
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                  <span class="label" id="engineLabel">Generator</span>
+                  <div class="seg" id="engineSeg" role="radiogroup" aria-labelledby="engineLabel">
+                    <button type="button" role="radio" data-engine="claude" aria-checked="false">Claude AI</button>
+                    <button type="button" role="radio" data-engine="mock" aria-checked="true">Offline</button>
+                  </div>
+                </div>
+                <div class="flex flex-wrap items-center justify-between gap-2" id="tierRow">
+                  <label class="label" for="tier">Thinking time</label>
+                  <select id="tier" class="field w-auto">
+                    <option value="quick">Fast</option>
+                    <option value="default" selected>Balanced</option>
+                    <option value="complex">Best</option>
+                  </select>
+                </div>
+                <p class="text-xs text-mute" id="engineNote"></p>
+              </div>
+              <div class="grid gap-2 border-t border-line pt-4">
+                <div class="flex flex-wrap items-center gap-2">
+                  <span class="label mr-auto">Scene code</span>
+                  <button type="button" class="link-btn" id="codeBtn" aria-expanded="false">Show</button>
+                  <button type="button" class="link-btn" id="copyBtn">Copy</button>
+                </div>
+                <pre class="code" id="code" hidden></pre>
+              </div>
+            </div>
+          </details>
         </form>
 
         <!-- Viewer -->
-        <div class="grid min-w-0 gap-4">
-          <div class="min-w-0 rounded-2xl border border-line bg-panel p-3 sm:p-4">
-            <div class="mb-3 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-              <h3 class="min-w-0 truncate font-display text-lg font-bold" id="takeTitle">Rooftop runner</h3>
-              <p class="min-w-0 text-sm text-mute" id="takeMeta"></p>
-            </div>
-            <div class="monitor" id="monitor" style="aspect-ratio:16/9">
-              <div class="busy" id="busy" hidden>
-                <canvas id="orbCanvas" aria-hidden="true"></canvas>
-                <div class="busy-inner">
-                  <div class="busy-head"><span class="ring-spin" aria-hidden="true"></span><p class="font-display text-lg font-bold" id="busyTitle">Making your animation</p></div>
-                  <p class="prompt-echo" id="promptEcho"></p>
-                  <ul id="busySteps"></ul>
-                  <div class="bar busy-bar" aria-hidden="true"><i id="busyBar"></i></div>
-                  <p class="tc text-xs" style="color:#A9AEC0" id="busyDetail"></p>
-                  <button type="button" class="btn w-fit" id="stopBtn">Stop</button>
-                </div>
+        <div class="card min-w-0">
+          <div class="mb-4 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+            <h3 class="min-w-0 truncate font-display text-xl font-bold" id="takeTitle">Rooftop runner</h3>
+            <p class="text-sm text-mute" id="takeMeta"></p>
+          </div>
+          <div class="monitor" id="monitor" style="aspect-ratio:16/9" title="Drag to steer the camera">
+            <div class="busy" id="busy" hidden>
+              <canvas id="orbCanvas" aria-hidden="true"></canvas>
+              <div class="busy-inner">
+                <div class="busy-head"><span class="ring-spin" aria-hidden="true"></span><p class="font-display text-lg font-bold" id="busyTitle">Making your animation</p></div>
+                <p class="prompt-echo" id="promptEcho"></p>
+                <ul id="busySteps"></ul>
+                <div class="bar busy-bar" aria-hidden="true"><i id="busyBar"></i></div>
+                <p class="tc text-xs" style="color:#A9AEC0" id="busyDetail"></p>
+                <button type="button" class="btn w-fit" id="stopBtn">Stop</button>
               </div>
             </div>
+          </div>
 
-            <!-- Transport -->
-            <div class="mt-3 grid gap-2">
-              <input id="scrub" type="range" min="0" max="1000" value="0" aria-label="Timeline">
-              <div class="flex flex-wrap items-center gap-2">
-                <button type="button" class="btn btn-icon" id="prevBtn" title="Previous frame (←)" aria-label="Previous frame">
-                  <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M3 3h2v10H3zM13 3v10L6 8z"/></svg></button>
-                <button type="button" class="btn btn-icon btn-primary" id="playBtn" title="Play or pause (Space)" aria-label="Pause">
-                  <svg id="playIcon" width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M3 2h4v12H3zM9 2h4v12H9z"/></svg></button>
-                <button type="button" class="btn btn-icon" id="nextBtn" title="Next frame (→)" aria-label="Next frame">
-                  <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M11 3h2v10h-2zM3 3v10l7-5z"/></svg></button>
-                <button type="button" class="btn" id="loopBtn" aria-pressed="true" title="Loop (L)">Loop: on</button>
-                <button type="button" class="btn" id="soundBtn" aria-pressed="false" title="Turn on sound for the preview (downloads are silent)"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 6v4h3l4 3V3L5 6z"/><path d="M11.5 5.5a3.5 3.5 0 0 1 0 5M13.3 3.7a6 6 0 0 1 0 8.6"/></svg><span>Sound: off</span></button>
-                <span class="tc ml-auto text-sm" id="timecode">00:00.00 / 00:06.00</span>
-                <span class="tc hidden text-sm text-mute sm:inline" id="frameNo">frame 1/180</span>
-                <button type="button" class="btn btn-icon" id="fullBtn" title="Full screen" aria-label="Full screen">
-                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4"/></svg></button>
-              </div>
+          <!-- Transport -->
+          <div class="mt-4 grid gap-2">
+            <input id="scrub" type="range" min="0" max="1000" value="0" aria-label="Timeline">
+            <div class="flex flex-wrap items-center gap-x-1.5 gap-y-2">
+              <button type="button" class="btn btn-icon" id="prevBtn" title="Previous frame (←)" aria-label="Previous frame"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M3 3h2v10H3zM13 3v10L6 8z"/></svg></button>
+              <button type="button" class="btn btn-icon btn-primary" id="playBtn" title="Play or pause (Space)" aria-label="Pause"><svg id="playIcon" width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M3 2h4v12H3zM9 2h4v12H9z"/></svg></button>
+              <button type="button" class="btn btn-icon" id="nextBtn" title="Next frame (→)" aria-label="Next frame"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M11 3h2v10h-2zM3 3v10l7-5z"/></svg></button>
+              <span class="tc ml-2 text-sm" id="timecode">00:00.00 / 00:06.00</span>
+              <span id="frameNo" class="hidden">frame 1/180</span>
+              <span class="ml-auto flex items-center gap-1.5">
+                <button type="button" class="btn btn-icon" id="loopBtn" aria-pressed="true" title="Loop (L)" aria-label="Loop"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 7V6a2 2 0 0 1 2-2h7l-2-2M13.5 9v1a2 2 0 0 1-2 2h-7l2 2"/></svg></button>
+                <button type="button" class="btn btn-icon" id="soundBtn" aria-pressed="false" title="Sound for the preview (downloads are silent)" aria-label="Sound"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 6v4h3l4 3V3L5 6z"/><path d="M11.5 5.5a3.5 3.5 0 0 1 0 5"/></svg></button>
+                <button type="button" class="btn btn-icon" id="fullBtn" title="Full screen" aria-label="Full screen"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4"/></svg></button>
+              </span>
             </div>
+          </div>
 
-            <p class="mt-2 text-xs text-mute">Drag the preview to steer the camera. Sound plays in the preview only. Downloads are silent.</p>
-
-            <!-- Refine -->
-            <div class="mt-4 grid gap-2 border-t border-line pt-4">
-              <label class="label" for="change">Change this animation</label>
+          <!-- Change + download -->
+          <div class="mt-6 grid gap-5 border-t border-line pt-5">
+            <div class="grid gap-2">
+              <label class="label" for="change">Change it</label>
               <div class="flex flex-col gap-2 sm:flex-row">
                 <input id="change" class="field flex-1" type="text" placeholder="Make it night time, add rain, speed it up…" maxlength="300">
-                <button type="button" class="btn" id="changeBtn">Apply change</button>
+                <button type="button" class="btn" id="changeBtn">Apply</button>
               </div>
             </div>
-            <div class="mt-3 hidden items-center justify-between gap-2 rounded-xl border border-err px-3 py-2 text-sm text-err" id="errBox">
+            <div class="hidden items-center justify-between gap-2 rounded-xl border border-err px-3 py-2 text-sm text-err" id="errBox">
               <span id="errText" class="min-w-0"></span>
               <button type="button" class="btn" id="fixBtn">Fix it</button>
             </div>
-          </div>
-
-          <!-- Camera and look -->
-          <div class="look-panel min-w-0 rounded-2xl border border-line bg-panel p-4">
-            <div class="mb-4 flex flex-wrap items-baseline justify-between gap-2">
-              <h3 class="font-display text-lg font-bold">Camera and look</h3>
-              <p class="text-xs text-mute">Changes show in the preview straight away.</p>
-            </div>
-            <div class="grid gap-5">
-              <div class="grid gap-2">
-                <div class="flex items-baseline justify-between"><span class="label" id="camLabel">Camera motion</span><span class="tc text-sm" id="camKOut">1.0×</span></div>
-                <div class="flex flex-wrap gap-2" id="cameraGrid" role="radiogroup" aria-labelledby="camLabel"></div>
-                <label class="sr-only" for="camK">Camera intensity</label>
-                <input id="camK" type="range" min="0.3" max="2" step="0.1" value="1">
+            <div class="grid gap-2">
+              <span class="label">Download</span>
+              <div class="flex flex-wrap gap-2" id="exportBtns">
+                <button type="button" class="btn" data-format="video" title="Records in real time, up to 1280 px">MP4</button>
+                <button type="button" class="btn" data-format="gif" title="Loops forever, 480 px">GIF</button>
+                <button type="button" class="btn" data-format="lottie" title="JSON for Lottie players">Lottie</button>
               </div>
-              <div class="grid gap-2">
-                <span class="label" id="lightLabel">Lighting</span>
-                <div class="grid grid-cols-2 gap-2 sm:grid-cols-4" id="lightGrid" role="radiogroup" aria-labelledby="lightLabel"></div>
+              <div class="hidden gap-2" id="exportProg">
+                <div class="flex items-center justify-between gap-2 text-sm"><span id="exportLabel">Rendering</span><button type="button" class="link-btn" id="exportCancel">Cancel</button></div>
+                <div class="bar"><i id="exportBar"></i></div>
               </div>
-              <div class="grid gap-4 sm:grid-cols-2">
-                <div class="grid gap-2">
-                  <span class="label" id="blurLabel">Motion blur</span>
-                  <div class="seg w-full" id="blurSeg" role="radiogroup" aria-labelledby="blurLabel"></div>
-                  <p class="text-xs text-mute">The preview blurs lightly. Downloads use full quality.</p>
-                </div>
-                <div class="grid gap-2">
-                  <span class="label" id="detailLabel">Scene detail</span>
-                  <div class="seg w-full" id="detailSeg" role="radiogroup" aria-labelledby="detailLabel"></div>
-                  <label class="flex items-center gap-2 text-sm"><input type="checkbox" id="physics" class="accent-check"> Fluid character physics</label>
-                </div>
-              </div>
-              <p class="text-xs text-mute">Scene detail and physics guide the next animation Claude writes. Camera, lighting and motion blur apply to every animation.</p>
             </div>
-          </div>
-
-          <!-- Export -->
-          <div class="min-w-0 rounded-2xl border border-line bg-panel p-4">
-            <div class="mb-3 flex flex-wrap items-baseline justify-between gap-2">
-              <h3 class="font-display text-lg font-bold">Download</h3>
-              <p class="text-xs text-mute">Keep this tab open while it renders.</p>
-            </div>
-            <div class="grid gap-2 sm:grid-cols-3" id="exportBtns">
-              <button type="button" class="btn justify-start text-left" data-format="video"><span class="tc font-medium">MP4</span><span class="text-xs font-normal text-mute">records in real time, up to 1280 px</span></button>
-              <button type="button" class="btn justify-start text-left" data-format="gif"><span class="tc font-medium">GIF</span><span class="text-xs font-normal text-mute">loops forever</span></button>
-              <button type="button" class="btn justify-start text-left" data-format="lottie"><span class="tc font-medium">Lottie</span><span class="text-xs font-normal text-mute">JSON for players</span></button>
-            </div>
-            <div class="mt-3 hidden gap-2" id="exportProg">
-              <div class="flex items-center justify-between gap-2 text-sm"><span id="exportLabel">Rendering</span><button type="button" class="btn py-1" id="exportCancel">Cancel</button></div>
-              <div class="bar"><i id="exportBar"></i></div>
-            </div>
-            <div class="mt-3 flex flex-wrap gap-2">
-              <button type="button" class="btn btn-ghost" id="codeBtn" aria-expanded="false">Show scene code</button>
-              <button type="button" class="btn btn-ghost" id="copyBtn">Copy code</button>
-            </div>
-            <pre class="code mt-3" id="code" hidden></pre>
           </div>
         </div>
       </div>
 
       <!-- History -->
-      <div class="mt-10">
-        <div class="mb-4 flex flex-wrap items-end justify-between gap-3">
-          <h3 class="font-display text-2xl font-extrabold tracking-tight">History and gallery</h3>
-          <div class="flex flex-wrap items-center gap-2">
+      <div class="mt-16">
+        <div class="mb-5 flex flex-wrap items-center justify-between gap-3">
+          <h3 class="font-display text-2xl font-extrabold tracking-tight">Your animations</h3>
+          <div class="flex flex-wrap items-center gap-3">
             <div class="seg" id="galleryTabs" role="tablist" aria-label="Gallery">
-              <button type="button" role="tab" data-tab="mine" aria-pressed="true">My animations</button>
+              <button type="button" role="tab" data-tab="mine" aria-pressed="true">Mine</button>
               <button type="button" role="tab" data-tab="examples" aria-pressed="false">Examples</button>
             </div>
-            <button type="button" class="btn btn-ghost" id="clearBtn">Clear history</button>
+            <button type="button" class="link-btn" id="clearBtn">Clear history</button>
           </div>
         </div>
-        <div class="grid grid-cols-1 items-start gap-3 min-[480px]:grid-cols-2 md:grid-cols-3 xl:grid-cols-4" id="gallery"></div>
+        <div class="grid grid-cols-1 items-start gap-4 min-[480px]:grid-cols-2 md:grid-cols-3 xl:grid-cols-4" id="gallery"></div>
       </div>
     </div>
   </section>
 </main>
 
-<footer class="border-t border-line">
-  <div class="mx-auto flex max-w-[1240px] flex-wrap items-center justify-between gap-3 px-4 py-6 text-sm text-mute" style="padding-bottom: calc(1.5rem + env(safe-area-inset-bottom, 0px))">
+<footer>
+  <div class="mx-auto flex max-w-[1180px] flex-wrap items-center justify-between gap-3 px-4 py-8 text-sm text-mute" style="padding-bottom: calc(2rem + env(safe-area-inset-bottom, 0px))">
     <span class="font-display font-bold text-ink">PromptToMotion</span>
-    <span>Your history stays in this browser.</span>
+    <span>Your animations stay in this browser.</span>
   </div>
 </footer>
 

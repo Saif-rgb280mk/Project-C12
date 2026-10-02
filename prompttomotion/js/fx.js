@@ -146,7 +146,7 @@
     const readColors = () => { colors = { a: cssVar("--accent") || "#3b47f5", b: cssVar("--hot") || "#e8481f", line: cssVar("--accent") || "#3b47f5" }; };
     function resize() {
       ({ w, h, d } = fitCanvas(cv));
-      const n = clamp(Math.round((w * h) / (d * d * 11000)), 36, 120);
+      const n = clamp(Math.round((w * h) / (d * d * 24000)), 16, 52);
       ps = Array.from({ length: n }, (_, i) => ({ x: Math.random() * w, y: Math.random() * h, vx: (Math.random() - 0.5) * 0.35 * d, vy: (Math.random() - 0.5) * 0.35 * d, s: 0.6 + Math.random() * 1.4, hot: i % 7 === 0 }));
     }
     resize(); readColors(); addEventListener("resize", resize);
@@ -165,11 +165,11 @@
       // wave mesh floor: a perspective grid that ripples
       ctx.lineWidth = d; ctx.strokeStyle = colors.line; const hz = h * 0.62;
       for (let r = 0; r < 12; r++) {
-        const z = (r + ((time * 0.35) % 1)) / 12, y0 = hz + (h - hz) * z * z; ctx.globalAlpha = 0.05 + 0.16 * z; ctx.beginPath();
+        const z = (r + ((time * 0.35) % 1)) / 12, y0 = hz + (h - hz) * z * z; ctx.globalAlpha = 0.03 + 0.09 * z; ctx.beginPath();
         for (let x = 0; x <= w; x += 24 * d) { const yy = y0 + Math.sin(x * 0.008 + time * 1.4 + r) * 7 * z * d + (mouse.on ? Math.max(0, 1 - Math.hypot(x - mouse.x, y0 - mouse.y) / (260 * d)) * -18 * d : 0); x ? ctx.lineTo(x, yy) : ctx.moveTo(x, yy); }
         ctx.stroke();
       }
-      for (let c = -9; c <= 9; c++) { ctx.globalAlpha = 0.08; ctx.beginPath(); ctx.moveTo(w / 2 + c * 26 * d, hz); ctx.lineTo(w / 2 + c * w * 0.11, h); ctx.stroke(); }
+      for (let c = -9; c <= 9; c++) { ctx.globalAlpha = 0.05; ctx.beginPath(); ctx.moveTo(w / 2 + c * 26 * d, hz); ctx.lineTo(w / 2 + c * w * 0.11, h); ctx.stroke(); }
       // particles and links
       for (const p of ps) {
         p.x += p.vx; p.y += p.vy;
@@ -180,11 +180,11 @@
       ctx.lineWidth = d;
       for (let i = 0; i < ps.length; i++) for (let j = i + 1; j < ps.length; j++) {
         const a = ps[i], b = ps[j], dx = a.x - b.x, dy = a.y - b.y, dd = dx * dx + dy * dy;
-        if (dd < link * link) { ctx.globalAlpha = (1 - Math.sqrt(dd) / link) * 0.32; ctx.strokeStyle = colors.line; ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke(); }
+        if (dd < link * link) { ctx.globalAlpha = (1 - Math.sqrt(dd) / link) * 0.16; ctx.strokeStyle = colors.line; ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke(); }
       }
       if (mouse.on) for (const p of ps) { const dist = Math.hypot(p.x - mouse.x, p.y - mouse.y); if (dist < mr) { ctx.globalAlpha = (1 - dist / mr) * 0.6; ctx.strokeStyle = colors.b; ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(mouse.x, mouse.y); ctx.stroke(); } }
       ctx.globalAlpha = 1; ctx.globalCompositeOperation = "lighter";
-      for (const p of ps) { const s = (5 + p.s * 6) * d, c = p.hot ? colors.b : colors.a; ctx.globalAlpha = 0.55 + 0.35 * Math.sin(time * 2 + p.x); ctx.drawImage(sprite(c), p.x - s, p.y - s, s * 2, s * 2); }
+      for (const p of ps) { const s = (5 + p.s * 6) * d, c = p.hot ? colors.b : colors.a; ctx.globalAlpha = 0.32 + 0.22 * Math.sin(time * 2 + p.x); ctx.drawImage(sprite(c), p.x - s, p.y - s, s * 2, s * 2); }
       for (let i = pulses.length - 1; i >= 0; i--) { const q = pulses[i]; q.t += dt; const k = q.t / 1.2; if (k >= 1) { pulses.splice(i, 1); continue; } ctx.globalAlpha = (1 - k) * 0.7; ctx.strokeStyle = colors.b; ctx.lineWidth = 2 * d; ctx.beginPath(); ctx.arc(q.x, q.y, k * 260 * d, 0, 6.283); ctx.stroke(); }
       ctx.globalCompositeOperation = "source-over"; ctx.globalAlpha = 1;
     }
@@ -235,7 +235,6 @@
     const hero = $("#hero");
     if (hero) hero.addEventListener("pointermove", e => {
       const r = hero.getBoundingClientRect(), x = (e.clientX - r.left) / r.width - 0.5, y = (e.clientY - r.top) / r.height - 0.5;
-      hero.style.setProperty("--px", e.clientX - r.left + "px"); hero.style.setProperty("--py", e.clientY - r.top + "px");
       for (const c of $$("[data-depth]", hero)) { const dp = parseFloat(c.dataset.depth); c.style.translate = x * dp * -34 + "px " + y * dp * -24 + "px"; }
     });
   }

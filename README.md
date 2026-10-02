@@ -30,6 +30,8 @@ Generating new animations uses Claude, so it works when the page is opened as an
 
 Scenes include a physics-driven runner, a dragon with a simulated tail and fire breath, a castle with cloth flags, swaying pine forests and a UFO. Drag any preview to steer the camera, and turn on **Sound** for a procedural soundscape synced to the action (footsteps, thunder, wingbeats).
 
+The interface is kept clean: the studio shows only the essentials and folds camera, lighting, blur, detail and the rest into one **Advanced** section.
+
 The site itself is animated: a particle entrance with a logo reveal, an interactive particle-mesh hero whose preview generates live as example prompts type, typing example prompts, glowing buttons, animated gradient borders and a loading orb that opens into your finished animation.
 
 - Open `prompttomotion/index.html` in a browser. **Mock (offline)** mode builds a scene from keywords in your prompt, so the whole app works without any AI. Published as an artifact on claude.ai it can also use **Claude AI** to write a new scene for each prompt.

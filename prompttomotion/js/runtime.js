@@ -49,6 +49,9 @@ function PTM_runtime(CONFIG) {
       const a = (l1 * l1 - l2 * l2 + d * d) / (2 * d), h = Math.sqrt(Math.max(0, l1 * l1 - a * a)), s = dir || 1;
       return { x: ax + (dx * a) / d - (s * dy * h) / d, y: ay + (dy * a) / d + (s * dx * h) / d, ex: ax + dx, ey: ay + dy };
     },
+    // How high the hip must be above the ankle line so a foot placed `stride` ahead of or behind the hip is always reachable
+    // (the knee never locks out). bob is how far the hip rises and falls. Put the planted ankle at groundY - sole - 1.
+    hipHeight(l1, l2, stride, bob) { const L = (l1 + l2) * 0.985; return Math.sqrt(Math.max(0, L * L - stride * stride)) - (bob || 0); },
     // Verlet chain (scarf, hair, tail, rope). Make one with makeChain, then call chain() every simulate() step.
     makeChain(n, x, y, len) { return Array.from({ length: n }, (_, i) => ({ x: x - i * (len || 10), y, px: x - i * (len || 10), py: y, len: len || 10 })); },
     chain(pts, ax, ay, dt, o) {
@@ -76,7 +79,8 @@ function PTM_runtime(CONFIG) {
     camMode: CONFIG.camera || "static", camK: CONFIG.camK == null ? 1 : CONFIG.camK, light: CONFIG.light || "none", blur: CONFIG.blur || 0,
     loop: CONFIG.loop !== false, playing: CONFIG.autoplay !== false, t: 0, lastFrame: -1, dirty: true,
     ready: false, broken: false, state: null, snaps: null, drawFn: null, setupFn: null, simFn: null, subCap: 99, ema: 0,
-    look: { x: 0, y: 0, tx: 0, ty: 0 }   // the viewer steering the camera by dragging the picture
+    look: { x: 0, y: 0, tx: 0, ty: 0 },   // the viewer steering the camera by dragging the picture
+    smooth: CONFIG.smooth !== false                 // preview at the screen's refresh rate instead of only on frame boundaries
   };
   const frames = () => Math.max(1, Math.round(S.duration * S.fps));
   const frameAt = t => Math.min(frames() - 1, Math.floor(t * S.fps + 1e-6));
@@ -202,19 +206,36 @@ function PTM_runtime(CONFIG) {
 
   // ---------- physics (baked once, so scrubbing and export are exact) ----------
   const cloneState = st => (typeof structuredClone === "function" ? structuredClone(st) : JSON.parse(JSON.stringify(st)));
+  // One whole loop is simulated first and thrown away (pre-roll), then the loop that is kept starts from that settled state.
+  // Cloth, hair and tails therefore arrive at frame 0 already moving, and the end of the loop flows into the start without a pop.
   function bake() {
     S.snaps = null;
     if (typeof S.simFn !== "function") return;
     seed(0);
     const st = typeof S.setupFn === "function" ? S.setupFn(S.W, S.H) : {}, N = frames(), SUB = 4, dt = 1 / (S.fps * SUB), snaps = [];
     S.state = st;
-    for (let f = 0; f < N; f++) {
-      for (let s = 0; s < SUB; s++) { seed(f * SUB + s + 7); S.simFn(st, dt, f / S.fps + s * dt, { W: S.W, H: S.H, fps: S.fps, duration: S.duration, frame: f }); }
-      snaps.push(cloneState(st));
+    for (let pass = 0; pass < 2; pass++) {
+      for (let f = 0; f < N; f++) {
+        for (let s = 0; s < SUB; s++) { seed(f * SUB + s + 7); S.simFn(st, dt, f / S.fps + s * dt, { W: S.W, H: S.H, fps: S.fps, duration: S.duration, frame: f }); }
+        if (pass === 1) snaps.push(cloneState(st));
+      }
     }
     S.snaps = snaps;
   }
-  const stateAt = f => (S.snaps ? S.snaps[clamp(f, 0, S.snaps.length - 1)] : S.state);
+  // Numbers blend, arrays and objects blend member by member. A jump bigger than 30% of the frame is a respawn, not motion: no blending.
+  function lerpState(a, b, k, jump) {
+    if (typeof a === "number" && typeof b === "number") return Math.abs(b - a) > jump ? a : a + (b - a) * k;
+    if (Array.isArray(a) && Array.isArray(b) && a.length === b.length) return a.map((v, i) => lerpState(v, b[i], k, jump));
+    if (a && b && typeof a === "object" && typeof b === "object") { const o = {}; for (const key in a) o[key] = key in b ? lerpState(a[key], b[key], k, jump) : a[key]; return o; }
+    return a;
+  }
+  // State is a continuous function of time: exact on frame boundaries (exports, stepping), blended in between (smooth preview, motion blur).
+  function stateAtT(t) {
+    if (!S.snaps) return S.state;
+    const x = clamp(t * S.fps, 0, S.snaps.length - 1), f0 = Math.floor(x), k = x - f0;
+    if (k < 1e-6 || f0 >= S.snaps.length - 1) return S.snaps[f0];
+    return lerpState(S.snaps[f0], S.snaps[f0 + 1], k, Math.max(S.W, S.H) * 0.3);
+  }
 
   // ---------- drawing one picture ----------
   // paintScene: camera + scene into a context (used for the picture itself and for every motion-blur sub-frame).
@@ -235,7 +256,7 @@ function PTM_runtime(CONFIG) {
     applyCamera(target, cam);
     seed(frame + 1);
     try {
-      S.drawFn(target, t, { W: S.W, H: S.H, duration: S.duration, progress: p, frame, frames: frames(), fps: S.fps, state: stateAt(frame), camera: cam, light: LIGHTS[S.light] || LIGHTS.none });
+      S.drawFn(target, t, { W: S.W, H: S.H, duration: S.duration, progress: p, frame, frames: frames(), fps: S.fps, state: stateAtT(t), camera: cam, light: LIGHTS[S.light] || LIGHTS.none });
     } catch (e) { fail(e); }
     target.restore();
     if (S.pixel > 1) { resetCtx(c); c.imageSmoothingEnabled = false; c.drawImage(low, 0, 0, cw, ch); c.imageSmoothingEnabled = true; }
@@ -280,13 +301,16 @@ function PTM_runtime(CONFIG) {
     else if (L.x !== L.tx || L.y !== L.ty) { L.x = L.tx; L.y = L.ty; S.dirty = true; }
     lastTs = ts;
     const f = frameAt(S.t);
-    if (f !== S.lastFrame || S.dirty) {
+    if (S.dirty || (S.smooth ? S.playing : f !== S.lastFrame)) {
       S.lastFrame = f; S.dirty = false;
       const t0 = performance.now(), subs = previewSubs();
-      renderAt(vctx, view.width, view.height, f / S.fps, subs);
-      // If the preview can't keep up, lower the blur quality of the preview only (exports stay full quality).
+      renderAt(vctx, view.width, view.height, S.smooth ? S.t : f / S.fps, subs);
+      // If the preview can't keep up, lower the blur quality of the preview only (exports stay full quality). If even
+      // that is too slow for the screen's refresh rate, fall back to drawing on frame boundaries only.
       const ms = performance.now() - t0; S.ema = S.ema ? S.ema * 0.9 + ms * 0.1 : ms;
-      if (S.playing && subs > 1 && S.ema > (1000 / S.fps) * 1.15) { S.subCap = subs - 1; S.ema = 0; post("perf", { subs: S.subCap }); }
+      const budget = S.smooth ? 1000 / 60 : 1000 / S.fps;
+      if (S.playing && subs > 1 && S.ema > budget * 1.15) { S.subCap = subs - 1; S.ema = 0; post("perf", { subs: S.subCap }); }
+      else if (S.playing && S.smooth && subs === 1 && S.ema > (1000 / S.fps) * 1.3 && S.t > 0.6) { S.smooth = false; S.ema = 0; post("perf", { smooth: false }); }
       post("time", { t: S.t, frame: f, frames: frames(), playing: S.playing, duration: S.duration, fps: S.fps });
     }
   }
@@ -327,6 +351,7 @@ function PTM_runtime(CONFIG) {
         if (m.camera != null) S.camMode = m.camera;
         if (m.camK != null) S.camK = m.camK;
         if (m.light != null) S.light = m.light;
+        if (m.smooth != null) { S.smooth = !!m.smooth; S.ema = 0; }
         if (m.blur != null) { S.blur = m.blur; S.subCap = 99; S.ema = 0; }
         if (rebake && S.ready) { try { bake(); } catch (err) { fail(err); } }
         S.t = Math.min(S.t, S.duration); S.dirty = true;

@@ -27,27 +27,30 @@ PTM_FX.stagger(elements, keyframes, { step: 0.07 });
 3. At 1.85 s the particles burst outward, an **iris** (`clip-path: circle(150%)` to `circle(0%)`) closes over the overlay, and `heroEntrance()` starts: the headline letters (split into spans by `splitHeadline()`) rise in with a blur and a stagger, then each `[data-anim]` block follows.
 4. Click, Enter, Space, Escape or the Skip button jump to the reveal. Failsafes: a CSS-only rule removes the overlay after 7 s if scripts fail, and hero content shows itself after 7.5 s.
 
+## Design rule: show what matters, fold the rest
+
+The page is deliberately quiet. The landing page is a hero and one short row of four features. The studio shows only what most people need (the prompt, a style, length, shape, frame rate, Generate, and the preview with its playback and download controls). Everything else (camera, lighting, blur, detail, physics, smooth preview, the generator choice, scene code) sits in one **Advanced** fold in the controls card. Its closed header shows a one-line summary of the current look ("Golden hour · Handheld · Medium blur"), so nothing is hidden from view without a clue.
+
+The motion follows the same rule: effects appear when you act (focus, hover, generate), not all the time. The prompt boxes have a plain border that becomes a moving gradient only while you type; buttons glow under the pointer; the only things that move on their own are the hero mesh (faint, and masked away from the headline), the live preview, and the small demos in the features row.
+
 ## Interactive hero
 
-- `heroMesh()` fills `#heroCanvas` with 36 to 120 drifting particles (scaled to the area), links any two within 130 px, and draws a perspective wave-grid floor. The pointer attracts nearby particles and draws lines to them; a click or tap sends out a ring pulse. It pauses when off screen or when the tab is hidden.
-- The hero preview card tilts in 3D toward the pointer (`.tilt`), has an animated conic-gradient border (`.gborder`, an `@property --ang` angle that rotates), and floating chips that bob and shift at different depths as the pointer moves (`data-depth`).
-- The headline's second line has a colour shimmer that runs through each letter with a per-letter delay.
+- `heroMesh()` fills `#heroCanvas` with 16 to 52 drifting particles (scaled to the area), links any two within 130 px with faint lines, and draws a perspective wave-grid floor. A CSS mask fades the canvas out on the left so the headline stays clean. The pointer attracts nearby particles; a click or tap sends out a ring pulse. It pauses when off screen or when the tab is hidden.
+- The hero preview card tilts a few degrees toward the pointer (`.tilt`).
+- The headline's second line has a slow colour shimmer that runs through each letter.
 
 ## The hero is a live demo
 
 The preview card in the hero does not play a canned video. `heroShow()` in `app.js` runs the real engine: as each example prompt finishes typing in the hero input, the preview blurs, the orb appears with the prompt typed into it, the mock generator builds a scene for that prompt (each with its own style, lighting and camera), and the iris opens onto the result. Then the next prompt starts typing. The same `irisReveal()` function finishes both this and the studio's transition. It pauses while the hero is off screen or the tab is hidden, and it is skipped under reduced motion.
 
-Also in the hero: a soft **aurora** follows the pointer (`--px`, `--py`), the stats **count up** once the entrance finishes, and below the hero a **marquee** of clickable example prompts scrolls slowly (it pauses on hover; a click fills the studio and starts generating).
-
 ## Micro-interactions
 
 | Effect | Where | How |
 |---|---|---|
-| Typing effect on example prompts | Hero input and studio prompt | `typer()` types, holds, erases and moves to the next idea in an overlay span with a blinking caret. It hides on focus or when there is text. Press the right arrow key in the empty box to use the idea. |
-| Glowing buttons | Every `.btn` | A pointer listener sets `--mx` and `--my`; a `::after` radial gradient follows the cursor. Primary buttons also have a moving sheen and a glow on hover. |
-| Animated gradient borders | Hero card, both prompt boxes | `.gborder`: conic gradient on the border box, angle animated with `@property`. Focus adds a glow ring. |
-| Spotlight cards | Feature and step cards | `.glow-el` shows a soft radial highlight under the pointer. |
-| Live demos | "Direct it like a film" cards | Pure CSS: an orbiting camera dot on an ellipse (`offset-path`), a sweeping light beam, motion-blur echoes, swinging pendulums. |
+| Typing effect on example prompts | Hero input and studio prompt (a "Surprise me" link also fills in an idea) | `typer()` types, holds, erases and moves to the next idea in an overlay span with a blinking caret. It hides on focus or when there is text. Press the right arrow key in the empty box to use the idea. |
+| Glowing buttons | Every `.btn` | A pointer listener sets `--mx` and `--my`; a `::after` radial gradient follows the cursor. Primary buttons also glow on hover. |
+| Animated gradient border | Both prompt boxes, while focused | `.gborder`: a plain border that becomes a conic gradient whose angle is animated with `@property`, plus a soft ring. |
+| Live demos | "Direct it like a film" row | Pure CSS: an orbiting camera dot on an ellipse (`offset-path`), a sweeping light beam, motion-blur echoes, swinging pendulums. |
 | Scroll reveals | Sections and cards | `setupReveal()` uses an `IntersectionObserver`; each `.rv` element rises in with a stagger by its position among siblings. |
 | Sticky header | Top | Blurs and gains a border after 8 px of scroll; nav links underline on hover. |
 | Loading spinners | Generate button, overlay, gallery | A spinner inside the button while working, a two-colour ring in the overlay, shimmer skeletons for thumbnails. |
