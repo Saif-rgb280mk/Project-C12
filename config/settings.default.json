@@ -1,0 +1,164 @@
+{
+  "graphics": {
+    "resolutionWidth": 2560,
+    "resolutionHeight": 1664,
+    "renderScale": 0.8,
+    "upscaler": "MetalFXTemporal",
+    "dynamicResolution": true,
+    "frameRateCap": "60",
+    "vsync": true,
+    "displayMode": "Fullscreen",
+    "rtReflections": false,
+    "rtStadiumLighting": false,
+    "rtQuality": "Medium",
+    "grassDensity": "High",
+    "crowdDetail": "High",
+    "weatherParticles": "High",
+    "motionBlur": true,
+    "motionBlurStrength": 0.5,
+    "shadows": "High",
+    "ambientOcclusion": "Medium",
+    "textureQuality": "High",
+    "antiAliasing": "TAA",
+    "sharpening": 0.35,
+    "filmGrain": true,
+    "lensDirt": true,
+    "batteryAwareProfile": true,
+    "lowPowerModeCap": true
+  },
+  "gameplay": {
+    "sprintSpeed": {
+      "user": 50,
+      "cpu": 50
+    },
+    "acceleration": {
+      "user": 50,
+      "cpu": 50
+    },
+    "shotError": {
+      "user": 50,
+      "cpu": 50
+    },
+    "passError": {
+      "user": 50,
+      "cpu": 50
+    },
+    "shotSpeed": {
+      "user": 50,
+      "cpu": 50
+    },
+    "passSpeed": {
+      "user": 50,
+      "cpu": 50
+    },
+    "firstTouchControl": {
+      "user": 50,
+      "cpu": 50
+    },
+    "goalkeeperAbility": {
+      "user": 50,
+      "cpu": 50
+    },
+    "marking": {
+      "user": 50,
+      "cpu": 50
+    },
+    "runFrequency": {
+      "user": 50,
+      "cpu": 50
+    },
+    "lineHeight": {
+      "user": 50,
+      "cpu": 50
+    },
+    "lineLength": {
+      "user": 50,
+      "cpu": 50
+    },
+    "lineWidth": {
+      "user": 50,
+      "cpu": 50
+    },
+    "fullbackPositioning": {
+      "user": 50,
+      "cpu": 50
+    },
+    "injuryFrequency": {
+      "user": 50,
+      "cpu": 50
+    },
+    "injurySeverity": {
+      "user": 50,
+      "cpu": 50
+    },
+    "halfLengthMinutes": 6,
+    "gameSpeed": 50,
+    "fatigueRealism": true
+  },
+  "camera": {
+    "preset": "Broadcast",
+    "height": 10,
+    "zoom": 10,
+    "trackingSpeed": 10,
+    "dynamicDirector": true,
+    "handheldShake": true
+  },
+  "audio": {
+    "master": 100,
+    "stadiumCrowd": 80,
+    "commentary": 70,
+    "onPitchSfx": 85,
+    "paAnnouncer": 60,
+    "refereeMic": 50,
+    "music": 40,
+    "menuSfx": 60,
+    "dynamicRange": "Wide",
+    "spatialAudio": true,
+    "commentaryLanguage": "en-GB"
+  },
+  "accessibility": {
+    "groundPass": "SemiAssisted",
+    "throughPass": "SemiAssisted",
+    "lobPass": "SemiAssisted",
+    "crossing": "SemiAssisted",
+    "shooting": "SemiAssisted",
+    "inputOverlay": false,
+    "overlayStyle": "KeyboardDiagram",
+    "holdToToggle": false,
+    "colorblind": "Off",
+    "indicatorScale": 1,
+    "subtitles": true,
+    "reduceFlashing": false,
+    "reduceCameraShake": false,
+    "menuNarration": false
+  },
+  "input": {
+    "bindings": {
+      "up": "Up",
+      "down": "Down",
+      "left": "Left",
+      "right": "Right",
+      "sprint": "LeftCtrl",
+      "strafeSwitch": "LeftShift",
+      "passLob": "S",
+      "through": "A",
+      "shootTackle": "D",
+      "shieldJockey": "W",
+      "modifierContext": "E"
+    },
+    "tuning": {
+      "tapThreshold": 0.2,
+      "chordWindow": 0.11,
+      "controlledSprintWindow": 0.24,
+      "featherWindow": 0.3,
+      "gestureWindow": 0.38,
+      "maxCharge": 1,
+      "stopBallTapMax": 0.2,
+      "timingScale": 1,
+      "sprintMode": "Ramp",
+      "precision": "Context"
+    },
+    "cameraRelativeSkills": false
+  },
+  "schemaVersion": 1
+}

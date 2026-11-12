@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>KINETIC XI — Playable Prototype</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <canvas id="view" tabindex="0" aria-label="KINETIC XI match view"></canvas>
+
+  <div id="overlay" role="dialog" aria-label="Settings">
+    <div class="panel">
+      <header>
+        <h1>KINETIC XI <span>· Settings</span></h1>
+        <button id="resume">Resume match (Esc)</button>
+      </header>
+      <div id="menu"></div>
+    </div>
+  </div>
+
+  <noscript>KINETIC XI needs JavaScript enabled.</noscript>
+
+  <!-- Plain scripts (no modules) so the page also works when opened straight from Finder. -->
+  <script src="js/core.js"></script>
+  <script src="js/surface.js"></script>
+  <script src="js/ball.js"></script>
+  <script src="js/input.js"></script>
+  <script src="js/settings.js"></script>
+  <script src="js/player.js"></script>
+  <script src="js/camera.js"></script>
+  <script src="js/audio.js"></script>
+  <script src="js/ai.js"></script>
+  <script src="js/game.js"></script>
+  <script src="js/render.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>

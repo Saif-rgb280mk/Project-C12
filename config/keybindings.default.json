@@ -1,0 +1,132 @@
+{
+  "layout": "KINETIC XI MacBook default (mandated)",
+  "bindings": [
+    {
+      "action": "Movement",
+      "keys": "Up/Left/Down/Right",
+      "context": "Always (camera-relative)"
+    },
+    {
+      "action": "Sprint",
+      "keys": "LeftCtrl + Arrows",
+      "context": "Ramps controlled->full after 240 ms"
+    },
+    {
+      "action": "Controlled Sprint",
+      "keys": "D or LeftCtrl + Direction",
+      "context": "D+Dir off the ball; Ctrl feathering on the ball"
+    },
+    {
+      "action": "Stop Ball",
+      "keys": "LeftCtrl (no direction)",
+      "context": "In possession, tap"
+    },
+    {
+      "action": "Strafe Dribble",
+      "keys": "LeftShift (no direction)",
+      "context": "In possession, hold"
+    },
+    {
+      "action": "Skill Moves",
+      "keys": "E + Direction gestures",
+      "context": "In possession"
+    },
+    {
+      "action": "Ground Pass / Header",
+      "keys": "S (tap)",
+      "context": "Released < 200 ms"
+    },
+    {
+      "action": "Through Pass",
+      "keys": "A",
+      "context": "Hold for power"
+    },
+    {
+      "action": "Lob Pass / Cross / Header",
+      "keys": "S (hold)",
+      "context": "Cross inside crossing zone"
+    },
+    {
+      "action": "Lobbed Through Pass",
+      "keys": "LeftShift + A",
+      "context": "Chord window 110 ms"
+    },
+    {
+      "action": "Driven Ground Pass",
+      "keys": "D + E",
+      "context": "Outside shooting context"
+    },
+    {
+      "action": "Shoot / Volley / Header",
+      "keys": "D",
+      "context": "Hold for power"
+    },
+    {
+      "action": "Finesse Shot",
+      "keys": "D + E",
+      "context": "In range, aim inside goal cone"
+    },
+    {
+      "action": "Protect / Shield / Jockey",
+      "keys": "W (+ Arrows)",
+      "context": "Shield in possession, jockey defending"
+    },
+    {
+      "action": "Change Player",
+      "keys": "LeftShift",
+      "context": "Out of possession, press"
+    },
+    {
+      "action": "Contain",
+      "keys": "E (hold)",
+      "context": "Defending (Context Key)"
+    },
+    {
+      "action": "Teammate Contain",
+      "keys": "D (hold)",
+      "context": "Defending"
+    },
+    {
+      "action": "Sliding Tackle",
+      "keys": "S",
+      "context": "Defending, press"
+    },
+    {
+      "action": "Steal / Standing Tackle",
+      "keys": "D + W or E",
+      "context": "Defending, D while W/E held"
+    },
+    {
+      "action": "Rush Goalkeeper Out",
+      "keys": "A (hold)",
+      "context": "Defending"
+    }
+  ],
+  "macSystemConflicts": [
+    {
+      "combo": "Control + Left/Right",
+      "owner": "macOS Spaces (Move left/right a space)",
+      "fix": "System Settings > Keyboard > Keyboard Shortcuts... > Mission Control: untick 'Mission Control', 'Application windows', 'Move left a space' and 'Move right a space' (or rebind Sprint)."
+    },
+    {
+      "combo": "Control + Up",
+      "owner": "macOS Mission Control",
+      "fix": "System Settings > Keyboard > Keyboard Shortcuts... > Mission Control: untick 'Mission Control', 'Application windows', 'Move left a space' and 'Move right a space' (or rebind Sprint)."
+    },
+    {
+      "combo": "Control + Down",
+      "owner": "macOS Application windows (App Expose)",
+      "fix": "System Settings > Keyboard > Keyboard Shortcuts... > Mission Control: untick 'Mission Control', 'Application windows', 'Move left a space' and 'Move right a space' (or rebind Sprint)."
+    }
+  ],
+  "rolloverLabChords": [
+    "LeftCtrl + Up + Right + D",
+    "LeftCtrl + Down + Left + S",
+    "LeftCtrl + Up + Left + E + D",
+    "LeftShift + A + Up + Right",
+    "E + D + Down + Right",
+    "W + D + Left + Up",
+    "W + Up + Down",
+    "LeftShift + Left + Right + Up"
+  ]
+}
