@@ -1,0 +1,16 @@
+{
+ "01_prematch": "**Pre-match.** Stadium fly-over with team sheets, conditions, difficulty, camera and the exact MacBook control reference. Press any key to kick off.",
+ "02_kickoff": "**Kick-off under the floodlights.** Broadcast gantry camera, scorebug, player card (sprint reserve D', match energy, muscle strain), radar and the live keyboard input overlay.",
+ "03_sprint_dribble": "**Sprint dribbling with physical knock-on touches** (Left Ctrl + \u2192 held). The ball is never attached: each touch is an impulse sized to the player's real pace.",
+ "04_shot": "**A shot struck with D.** The launch is solved through the real ball physics (see Part D for the measured speed and spin), then human error is applied to the launch, not the outcome.",
+ "05_settings_gameplay": "**Settings \u2192 Gameplay.** Half length, difficulty, fatigue and every simulation slider with separate User and CPU values.",
+ "06_settings_controls": "**Settings \u2192 Controls.** Click-to-rebind for every slot, swap-on-conflict, and the Keyboard Doctor explaining the macOS Mission Control conflict with Control + Arrow keys.",
+ "07_settings_graphics": "**Settings \u2192 Graphics.** Render scale, frame-rate cap (30/60/120/Uncapped), crowd, turf and weather detail, motion blur, grain, vignette, radar.",
+ "08_settings_accessibility": "**Settings \u2192 Accessibility.** Assisted / Semi / Manual passing and shooting, input overlay, timing-window scale, indicator size, reduce flashing/shake, sprint mode and D + Modifier priority.",
+ "09_storm_broadcast": "**Storm on the Living Pitch.** Rain streaks and mist, darker soaked turf and puddles forming in low, compacted spots. The HUD reports the pitch state.",
+ "10_storm_pro_camera": "**Pro camera in the storm.** Eye-line view behind the controlled player; lines are clipped at the camera's near plane.",
+ "11_tele_camera": "**Tele camera.** High gantry with a long lens for a flattened, tactical view.",
+ "12_day_broadcast": "**Day match, dry pitch.** Broadcast camera with single sun shadows.",
+ "13_goal_celebration": "**Goal!** Celebration camera with letterbox, net ripple, crowd roar, chime and PA announcement.",
+ "14_half_time_stats": "**Half-time statistics.** Possession, shots on target, xG, passes completed, tackles, saves, fouls/offsides/corners, distance covered."
+}

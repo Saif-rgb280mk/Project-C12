@@ -1,0 +1,71 @@
+{
+  "kickoffPass": {
+    "state": "play",
+    "passes": 1,
+    "ballSpeed": "9.4"
+  },
+  "dribble": {
+    "jog": {
+      "possessionKept": "12/12",
+      "maxGapM": 2.01,
+      "finalSpeedMs": 5.6
+    },
+    "sprint": {
+      "possessionKept": "12/12",
+      "maxGapM": 2.53,
+      "finalSpeedMs": 8.7
+    },
+    "closeControl": {
+      "possessionKept": "12/12",
+      "maxGapM": 1.31,
+      "finalSpeedMs": 4.1
+    }
+  },
+  "shot": {
+    "shots": 1,
+    "type": "Shot",
+    "ballSpeed": "26.5",
+    "spinRadS": "14.0"
+  },
+  "storm": {
+    "avgMoisture": "1.00",
+    "maxWaterMm": "2.97",
+    "pitch": "Soaked — puddles forming"
+  },
+  "goal": {
+    "state": "goal",
+    "score": "2-0"
+  },
+  "halfTime": "halftime",
+  "soak": {
+    "simulatedSeconds": 258,
+    "finalState": "fulltime",
+    "score": "1-3",
+    "nanValues": 0,
+    "pitch": "Waterlogged — passes die in puddles",
+    "injuries": 2,
+    "stats": [
+      {
+        "shots": 2,
+        "onTarget": 1,
+        "xG": 0.17,
+        "passes": "5/14",
+        "tackles": 18,
+        "saves": 2,
+        "corners": 2,
+        "fouls": 3
+      },
+      {
+        "shots": 5,
+        "onTarget": 3,
+        "xG": 0.8,
+        "passes": "18/34",
+        "tackles": 26,
+        "saves": 0,
+        "corners": 3,
+        "fouls": 0
+      }
+    ]
+  },
+  "pageErrors": []
+}

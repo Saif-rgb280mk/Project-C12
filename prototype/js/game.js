@@ -62,6 +62,7 @@
       this.surface.setUniform(WEATHER[settings.weather.preset].start, 0, 0);
       this.placeForKickoff(this.teams[0]);
       this.state = 'prematch';
+      this.toasts = [];
       this.camera.mode = 'walkout';
     }
 
@@ -479,8 +480,10 @@
     touches() {
       if (this.gkHold) return;
       const cands = [];
+      const c0 = this.carrier;
       for (const p of this.players) {
         if (p.touchCd > 0) continue;
+        if (c0 && p !== c0 && p.team === c0.team) continue;   // teammates never nick the ball off the carrier
         const r = this.reach(p);
         if (r) cands.push(r);
       }
@@ -642,14 +645,14 @@
       if (sp < 12 + 10 * abil && this.rng.next() < 0.55 + 0.4 * abil) {
         this.gkHold = { gk: p, t: 0 };
         b.vel = { x: 0, y: 0, z: 0 }; b.spin = { x: 0, y: 0, z: 0 };
-        if (shot) { this.stats[p.team.id].saves++; this.audio.say('Gathered by the keeper.'); this.lastShot = null; }
+        if (shot) { this.stats[p.team.id].saves++; this.stats[this.other(p.team).id].onTarget++; this.audio.say('Gathered by the keeper.'); this.lastShot = null; }
         return;
       }
       if (this.rng.next() < K.sat((sp - 24) / 22) * (1.15 - abil) * 0.8) { b.vel = V.mul(b.vel, 0.85); p.touchCd = 1; return; }
       const s = p.team.attackSign;
       this.phys.strike(b, { x: Math.abs(b.vel.x) * 0.35 * s + this.rng.range(-1, 1), y: b.vel.y * 0.4 + this.rng.range(-6, 6), z: 2 + this.rng.next() * 3 }, { x: this.rng.range(-20, 20), y: this.rng.range(-20, 20), z: 0 }, 5);
       p.touchCd = 0.8;
-      if (shot) { this.stats[p.team.id].saves++; this.toast('WHAT A SAVE!', 'big', 2); this.audio.say('What a save!'); this.audio.roar(0.7); this.lastShot = null; }
+      if (shot) { this.stats[p.team.id].saves++; this.stats[this.other(p.team).id].onTarget++; this.toast('WHAT A SAVE!', 'big', 2); this.audio.say('What a save!'); this.audio.roar(0.7); this.lastShot = null; }
     }
 
     gkHoldTick(dt) {
@@ -773,8 +776,7 @@
         if (SHOTS.includes(type)) {
           const xg = K.sat(AI.threat(from, sign) * 0.9);
           this.stats[p.team.id].shots++; this.stats[p.team.id].xg += xg;
-          this.lastShot = { t: this.time, team: p.team, xg, onTarget: Math.abs(aimY) < P.GOAL_HW };
-          if (Math.abs(aimY) < P.GOAL_HW) this.stats[p.team.id].onTarget++;
+          this.lastShot = { t: this.time, team: p.team, xg };
           this.audio.roar(0.5);
           if (isUser && V.fdist(from, { x: goalX, y: 0, z: 0 }) > 23) this.cpuManager.observe('LongShot');
           if (isUser && this.userPoss.start > 0 && this.time - this.userPoss.start < 8) this.cpuManager.observe('FastCounter');
@@ -782,6 +784,7 @@
       }
 
       this.phys.strike(b, vel, spin, (this.tickN * 2654435761) >>> 0);
+      this.lastKick = { type, speed: V.len(vel), spin: V.len(spin), t: this.time };
       b.pos.z = from.z;
       if (vel.z > 0.05 || from.z > K.BALL.r + 0.05) b.grounded = false;
       p.touchCd = 0.45; p.facing = V.heading(vel);
@@ -841,6 +844,7 @@
     goal(side) {
       const team = this.teams.find((t) => t.attackSign === side);
       this.score[team.id]++;
+      if (this.lastShot && this.lastShot.team === team) this.stats[team.id].onTarget++;
       this.state = 'goal'; this.goalTimer = 0;
       const scorer = this.lastTouch && this.lastTouch.team === team ? this.lastTouch : null;
       this.celebrator = scorer || team.players.find((p) => /ST/.test(p.role));

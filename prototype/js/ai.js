@@ -376,7 +376,7 @@
     if (dGoal < 30 && sign * p.pos.x > 0) {
       const xg = K.sat(here * 1.25 * (1 - pressure * 0.4));
       const inBox = dGoal < 17 && Math.abs(p.pos.y) < P.BOX_HW;
-      opts.push({ kind: dGoal > 17 && Math.abs(p.pos.y) < 14 && Math.random() < 0.35 ? 'FinesseShot' : 'Shot', value: xg * 1.8 + (inBox ? 0.3 : 0) + (dGoal < 24 ? 0.08 : 0) });
+      opts.push({ kind: dGoal > 17 && Math.abs(p.pos.y) < 14 && Math.random() < 0.35 ? 'FinesseShot' : 'Shot', value: xg * 1.8 + (inBox ? 0.3 : 0) + (dGoal < 25 ? 0.12 : 0) });
     }
     for (const q of T.players) {
       if (q === p || q.injured) continue;
@@ -385,19 +385,20 @@
       const tgt = V.add(q.pos, lead);
       const d = V.fdist(p.pos, tgt);
       if (d < 5 || d > 50) continue;
-      const safety = AI.laneSafety(m, p.pos, tgt, T, 16);
+      const safety = AI.laneSafety(m, p.pos, tgt, T, 9.5);   // real average speed of a ground pass
       const val = AI.threat(tgt, sign);
       const prog = sign * (tgt.x - p.pos.x) / 40;
       const wide = Math.abs(tgt.y) > P.BOX_HW && sign * tgt.x > P.HL - 24;
       const kind = d > 30 && safety < 0.5 ? 'LobPass' : 'GroundPass';
       const s2 = kind === 'LobPass' ? (AI.nearestOpponent(m, q).d < 2 ? 0.6 : 0.85) : safety;
-      opts.push({ kind, q, target: tgt, value: (val + 0.06 * prog + 0.03) * s2 * (1 + pressure * 0.3) });
+      if (s2 < 0.3) continue;   // don't gift the ball away
+      opts.push({ kind, q, target: tgt, value: (val + 0.06 * prog + 0.03) * s2 * s2 * (1 + pressure * 0.3) });
       // Through ball into a run
       if (V.flen(q.vel) > 4 && sign * q.vel.x > 2) {
         const tt = V.add(q.pos, V.mul(V.fnorm(q.vel), 7 + V.flen(q.vel) * 0.5));
         tt.x = K.clamp(tt.x, -P.HL + 2, P.HL - 2); tt.y = K.clamp(tt.y, -P.HW + 2, P.HW - 2);
         const ctl = AI.control(m, tt, T);
-        opts.push({ kind: 'ThroughPass', q, target: tt, value: AI.threat(tt, sign) * ctl * AI.laneSafety(m, p.pos, tt, T, 18) * 1.1 });
+        opts.push({ kind: 'ThroughPass', q, target: tt, value: AI.threat(tt, sign) * ctl * AI.laneSafety(m, p.pos, tt, T, 11) * 1.1 });
       }
       if (wide && sign * p.pos.x > P.HL - 26 && Math.abs(p.pos.y) > P.BOX_HW - 4 && ROLE_ATT.has(q.role) && Math.abs(q.pos.y) < 10) {
         opts.push({ kind: 'Cross', q, target: { x: sign * (P.HL - 9), y: q.pos.y * 0.6, z: 0 }, value: 0.22 });
@@ -433,11 +434,13 @@
       return { kind: 'FinesseShot', power: 0.7 };
     }
     let best = null, bv = -1;
+    const isThrow = r && r.kind === 'throw';
     for (const q of T.players) {
       if (q === taker || q.isGK) continue;
       const d = V.fdist(taker.pos, q.pos);
-      if (d < 6 || d > 45) continue;
-      const v = AI.laneSafety(m, taker.pos, q.pos, T, 15) * (0.6 + AI.threat(q.pos, sign)) - d * 0.003 + Math.random() * 0.1;
+      if (d < (isThrow ? 4 : 6) || d > (isThrow ? 20 : 45)) continue;
+      if (isThrow && AI.nearestOpponent(m, q).d < 2.5) continue;   // throws go short, to a free man
+      const v = AI.laneSafety(m, taker.pos, q.pos, T, 9.5) * (0.6 + AI.threat(q.pos, sign)) - d * 0.003 + Math.random() * 0.1;
       if (v > bv) { bv = v; best = q; }
     }
     if (!best) return { kind: 'Clearance', power: 0.8 };

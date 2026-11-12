@@ -1,0 +1,57 @@
+KINETIC XI engine core — test run
+[ OK ] ball_drag_crisis
+[ OK ] ball_lift_coefficient_monotonic_and_capped
+[ OK ] ball_vacuum_matches_analytic_projectile
+[ OK ] ball_drag_shortens_range
+[ OK ] ball_topspin_dips_backspin_floats
+    free kick: lateral 4.12 m, height 1.85 m at 25 m
+[ OK ] ball_sidespin_curls_free_kick_into_plausible_range
+[ OK ] ball_strike_offset_generates_correct_spin_sign
+[ OK ] ball_knuckle_wanders_without_spin_and_is_deterministic
+    bounce apex from 2 m: dry 0.95  wet 0.78  puddle 0.32
+[ OK ] ball_bounce_lower_on_wet_and_dead_in_puddle
+    12 m/s ground pass travels: dry 34.5 m  wet 38.3 m  flooded 9.4 m
+[ OK ] ball_rolling_distance_dry_wet_flooded
+[ OK ] ball_skid_transitions_to_roll
+[ OK ] atmosphere_altitude_reduces_density
+[ OK ] surface_rain_creates_puddles_in_low_compacted_spots_then_drains
+[ OK ] surface_footfalls_wear_wet_turf_faster
+    10 m split 2.04 s, 30 m split 4.38 s, speed after 8 s 9.00 m/s
+[ OK ] locomotion_sprint_splits_are_elite_plausible
+[ OK ] locomotion_turning_respects_momentum_and_traction
+[ OK ] locomotion_gait_plants_feet_at_sprint_cadence
+[ OK ] ik_two_bone_preserves_lengths_and_reaches
+[ OK ] ik_unreachable_target_is_clamped_not_nan
+[ OK ] ik_pelvis_drops_for_wide_stance_and_shifts_weight
+[ OK ] fatigue_dprime_drains_and_recovers
+    90 min: distance 10.6 km, glycogen 0.39, CS 3.89 m/s
+[ OK ] fatigue_full_match_glycogen_and_injury_slider
+[ OK ] input_default_layout_matches_spec
+[ OK ] input_mac_virtual_keycodes_roundtrip
+[ OK ] input_movement_is_camera_relative
+[ OK ] input_sprint_ramps_controlled_to_full_and_feathering
+[ OK ] input_stop_ball_and_hold
+[ OK ] input_s_tap_ground_pass_hold_lob_cross_header
+[ OK ] input_through_and_lobbed_through_chords
+[ OK ] input_shot_power_and_precision_context
+[ OK ] input_skill_gestures_relative_to_facing
+[ OK ] input_strafe_and_controlled_sprint_off_ball
+[ OK ] input_defending_actions
+[ OK ] input_losing_ball_cancels_charge
+[ OK ] input_frame_rate_independent_tap
+[ OK ] input_rebind_swaps_and_mac_conflicts_detected
+[ OK ] settings_json_roundtrip_and_clamping
+[ OK ] settings_slider_curve
+[ OK ] settings_apple_presets
+[ OK ] settings_dynamic_resolution_controller
+[ OK ] tactics_pitch_control_and_threat
+    run target (22.0, 10.0) threat 0.11 control 0.82 offside 0
+[ OK ] tactics_run_planner_finds_onside_space
+[ OK ] tactics_defensive_line_triggers
+    CPU manager: Shifting the block and doubling up on your right flank
+    CPU manager: Dropping the defensive line: you keep playing in behind
+    CPU manager: Pressing high: your build-up is slow
+[ OK ] tactics_adaptive_manager_learns_user_habits
+[ OK ] camera_presets_and_tracking_speed
+
+271 checks, 0 failures, 45 tests

@@ -1,0 +1,48 @@
+KINETIC XI — Physics & Systems Lab
+
+== 1. Free kick from 25 m: same strike speed (27 m/s, 16 deg), different spin ==
+strike                        time(s)  y@goal(m)  z@goal(m)     v@goal
+no spin (knuckle seed 11)        1.09       0.53       2.01       20.7
+no spin (knuckle seed 23)        1.09       0.16       1.65       20.8
+curler 8 rev/s                   1.11       3.88       1.86       20.7
+curler + topspin                 1.12       3.32       0.44       14.5
+driven topspin 6 rev/s           1.15       0.00       0.75       14.1
+
+== 2. A 12 m/s ground pass on different pitch states ==
+pitch                           distance(m)      time(s)
+dry, 24 mm grass                       34.5         8.08
+dew / damp                             36.1         8.60
+soaked (no puddles)                    38.3         9.38
+puddled (4 mm)                         17.7         3.46
+flooded (9 mm)                          9.4         1.69
+churned mud                            33.7         7.82
+
+== 3. Intent Arbiter trace (exact MacBook layout) ==
+  t=0.00  Right arrow down          
+  t=0.00      sprint=none charging=None
+  t=0.05  Left Ctrl down (sprint)   
+  t=0.25      sprint=CONTROLLED charging=None
+  t=0.50      sprint=FULL charging=None
+  t=0.75      sprint=FULL charging=None
+  t=0.80  S down                    
+  t=0.88  S up after 80 ms          
+  t=0.88      -> GroundPass (power 0.40, held 80 ms)
+  t=1.00      sprint=FULL charging=None
+  t=1.20  Modifier E down           
+  t=1.22  D down                    
+  t=1.25      sprint=FULL charging=FinesseShot
+  t=1.50      sprint=FULL charging=FinesseShot
+  t=1.70  D up after 480 ms         
+  t=1.71      -> FinesseShot (power 0.48, held 480 ms)
+  t=1.75      sprint=FULL charging=None
+  t=1.75  E up                      
+
+== 4. 90-minute physiology of a box-to-box midfielder ==
+minute      D'(m)   glycogen         km    topSpeedX       errorX
+     0      175.8       1.00       0.01        0.998        1.014
+    15      109.7       0.88       2.18        0.949        1.296
+    30      104.6       0.75       4.36        0.938        1.375
+    45      101.7       0.63       6.53        0.929        1.447
+    60       98.8       0.50       8.71        0.920        1.518
+    75       95.7       0.38      10.89        0.911        1.590
+    90       92.6       0.26      13.06        0.901        1.663
