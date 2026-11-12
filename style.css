@@ -1,0 +1,74 @@
+/* Whole page */
+body {
+    font-family: Arial, sans-serif;
+    background-color: #f0f4f8;
+    margin: 0;
+    color: #333;
+}
+
+/* Top bar */
+header {
+    background-color: #2b6cb0;
+    color: white;
+    text-align: center;
+    padding: 20px;
+}
+
+/* Menu links */
+nav a {
+    color: white;
+    text-decoration: none;
+    margin: 0 10px;
+    font-weight: bold;
+}
+
+nav a:hover {
+    text-decoration: underline;
+}
+
+/* Middle part of the page */
+main {
+    max-width: 700px;
+    margin: 20px auto;
+    padding: 0 16px;
+}
+
+/* Every element with class="card" */
+.card {
+    background-color: white;
+    padding: 20px;
+    margin-bottom: 20px;
+    border-radius: 10px;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+}
+
+h2 {
+    color: #2b6cb0;
+}
+
+img {
+    width: 100%;
+    border-radius: 8px;
+}
+
+/* Button */
+button {
+    background-color: #2b6cb0;
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 5px;
+    font-size: 16px;
+    cursor: pointer;
+}
+
+button:hover {
+    background-color: #1a4a80;
+}
+
+/* Bottom of the page */
+footer {
+    text-align: center;
+    padding: 15px;
+    color: #777;
+}
