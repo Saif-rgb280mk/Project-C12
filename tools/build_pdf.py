@@ -471,7 +471,7 @@ def draw_cover(c, doc):
     items = [
         "Part A   The Master Prompt & Design Blueprint",
         "Part B   KINETIC XI 3D — the playable 3D browser game (Three.js, PBR, shadows, bloom)",
-        "Part C   Complete source code (3D game, C++ engine, Objective-C++, Swift, Metal, 2D prototype, tools)",
+        "Part C   Complete source code — 3D game, C++ engine, macOS layer, tools",
         "Part D   Verified results — engine tests, physics lab, 3D game tests, browser tests",
         "Part E   What I used · how to run it on your MacBook · study guide",
     ]
@@ -644,11 +644,11 @@ def main():
     pr = g3d["presets"]
     rows = [["Check", "Result"],
             ["3D game: headless simulation + layout tests", g3d_txt.strip().splitlines()[-1]],
-            ["3D game: boot, menu, PLAY MATCH, HUD", f"state {g3d['play']['state']}, HUD shown {g3d['play']['hud']}, page errors {len(g3d['pageErrors'])}"],
+            ["3D game: boot, menu, PLAY MATCH, HUD", f"state {g3d['play']['state']}, HUD shown {'yes' if g3d['play']['hud'] else 'no'}, page errors {len(g3d['pageErrors'])}"],
             ["3D game: live key tester (W + D + ↑ held)", ", ".join(g3d["keyTester"])],
             ["3D game: shot power bar and strike", f"{g3d['powerBar']['charging']} charging · {g3d['shot']['type']} {g3d['shot']['speed']} m/s, {g3d['shot']['spin']} rad/s spin"],
             ["3D game: goal, net ripple, celebration", f"state {g3d['goal']['state']}, score {g3d['goal']['score']}"],
-            ["3D game: Esc pause / resume", f"paused {g3d['pause']['paused']} → resumed {not g3d['resume']['paused']}"],
+            ["3D game: Esc pause / resume", f"Esc paused: {'yes' if g3d['pause']['paused'] else 'no'} → RESUME: {'yes' if not g3d['resume']['paused'] else 'no'}"],
             ["3D game: live presets (scale · shadows · crowd · AA)", " | ".join(f"{k}: {v['renderScale']}x · {v['shadowMap'] if v['shadows'] else 'off'} · {v['crowd']} · {v['aa']}" for k, v in pr.items())],
             ["C++ engine unit + physics tests", summary],
             ["Compiler warnings (-Wall -Wextra -Wpedantic -Wshadow -Wconversion)", "0"],

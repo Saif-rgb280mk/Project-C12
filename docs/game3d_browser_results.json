@@ -1,0 +1,82 @@
+{
+  "boot": {
+    "state": "prematch",
+    "loadingHidden": true,
+    "menuOpen": true
+  },
+  "keyTester": [
+    "W",
+    "D",
+    "↑"
+  ],
+  "play": {
+    "state": "kickoff",
+    "hud": true,
+    "user": "Castell"
+  },
+  "kickoff": {
+    "state": "play",
+    "passes": 1
+  },
+  "powerBar": {
+    "charging": "Shot",
+    "power": 0.27
+  },
+  "shot": {
+    "type": "Shot",
+    "speed": 37,
+    "spin": 14
+  },
+  "goal": {
+    "state": "goal",
+    "score": "1-0"
+  },
+  "pause": {
+    "paused": true,
+    "menuOpen": true
+  },
+  "resume": {
+    "paused": false,
+    "menuOpen": false
+  },
+  "presets": {
+    "Low": {
+      "renderScale": 0.7,
+      "shadows": false,
+      "shadowMap": 1024,
+      "crowd": 4320,
+      "aa": "FXAA",
+      "bloom": false,
+      "fpsTarget": "60"
+    },
+    "Medium": {
+      "renderScale": 0.85,
+      "shadows": true,
+      "shadowMap": 1024,
+      "crowd": 9600,
+      "aa": "FXAA",
+      "bloom": true,
+      "fpsTarget": "60"
+    },
+    "High": {
+      "renderScale": 1,
+      "shadows": true,
+      "shadowMap": 2048,
+      "crowd": 16320,
+      "aa": "MSAA",
+      "bloom": true,
+      "fpsTarget": "60"
+    },
+    "Ultra (MacBook Pro)": {
+      "renderScale": 1.25,
+      "shadows": true,
+      "shadowMap": 4096,
+      "crowd": 24000,
+      "aa": "MSAA",
+      "bloom": true,
+      "fpsTarget": "120"
+    }
+  },
+  "fpsCounter": "10 FPS100.0 mstarget 60",
+  "pageErrors": []
+}
