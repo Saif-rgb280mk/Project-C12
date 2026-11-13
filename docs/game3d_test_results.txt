@@ -1,0 +1,7 @@
+arbiter: 28/28 layout checks passed
+build: 144 club/kit/condition combinations created
+soak seed 1 (Floodlit Night): 253 s simulated, score 1-2, goals 3, restarts 10, shots 11, passes 19/28, NaN 0
+soak seed 2 (Rain): 240 s simulated, score 0-0, goals 0, restarts 9, shots 3, passes 19/36, NaN 0
+soak seed 3 (Clear Day): 251 s simulated, score 0-2, goals 2, restarts 9, shots 7, passes 20/38, NaN 0
+
+178 checks, 0 failures

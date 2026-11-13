@@ -3,7 +3,7 @@
 
 Output: dist/KINETIC_XI_Master_Blueprint_and_Source.pdf containing
   Part A  The Master Prompt & Design Blueprint (rendered from docs/parts/*.md)
-  Part B  Prototype screenshot tour (docs/screenshots/*.jpg)
+  Part B  KINETIC XI 3D — the playable 3D game (docs/parts/05_game3d.md + screenshots)
   Part C  Complete source code, syntax highlighted with line numbers
   Part D  Verified results (engine tests, physics lab, browser tests)
   Part E  What I used: languages, tools, status, how to run, study guide
@@ -34,6 +34,7 @@ ROOT = Path(__file__).resolve().parent.parent
 DOCS = ROOT / "docs"
 PARTS = DOCS / "parts"
 SHOTS = DOCS / "screenshots"
+SHOTS3D = DOCS / "screenshots3d"
 OUT_PDF = ROOT / "dist" / "KINETIC_XI_Master_Blueprint_and_Source.pdf"
 OUT_MD = DOCS / "KINETIC_XI_Master_Design_Prompt.md"
 TODAY = datetime.date.today().strftime("%d %B %Y")
@@ -265,6 +266,32 @@ def md_to_flowables(md):
 
 # --------------------------------------------------------------------------- source listings ---
 SOURCES = [
+    ("game3d/index.html", "3D game page: loading screen, HUD, menu shell, Three.js r160 import map from the CDN."),
+    ("game3d/css/style.css", "Dark glassmorphism menu, broadcast scorebug, radar, toasts, panels, FPS counter."),
+    ("game3d/js/main.js", "Boot, fixed 120 Hz simulation loop, FPS limiter, live settings, pause/play flow."),
+    ("game3d/js/gfx/engine.js", "WebGLRenderer, ACES tone mapping, shadows, EffectComposer: MSAA → Bloom → Output → FXAA."),
+    ("game3d/js/gfx/environment.js", "Physical sky, sun, four shadow-casting floodlights, volumetric light shafts, stars, fog, PMREM."),
+    ("game3d/js/gfx/stadium.js", "Procedural two-tier bowl, roof trusses, lamp banks, LED boards, dugouts, 24k instanced crowd."),
+    ("game3d/js/gfx/pitch.js", "Mowing-stripe turf, procedural grass normal map, 3D lines, live skid marks, wet response, flags."),
+    ("game3d/js/gfx/goals.js", "Goal frames and Verlet-cloth nets that react to the ball and ripple on goals."),
+    ("game3d/js/gfx/humanoid.js", "Articulated players (skeleton, sculpted body, kits, numbers) and procedural animation."),
+    ("game3d/js/gfx/ball3d.js", "Paneled ball texture + seam normals, clearcoat PBR, spin integrated from the physics."),
+    ("game3d/js/gfx/weather.js", "Rain streaks and splash rings."),
+    ("game3d/js/gfx/markers.js", "At-feet stamina/power ring and pass-target chevron."),
+    ("game3d/js/gfx/camera.js", "Menu fly-through, Broadcast/Tele gantry with dynamic zoom, celebration camera."),
+    ("game3d/js/ui/menu.js", "KICK OFF / GAME SETTINGS / CONTROLS menus; pause menu; live settings."),
+    ("game3d/js/ui/hud.js", "Scorebug, toasts, radar, action readout, half/full-time stats, FPS counter."),
+    ("game3d/js/sim/input.js", "MacBook capture (preventDefault) + Context Intent Arbiter for the updated layout."),
+    ("game3d/js/sim/settings.js", "Graphics presets (Low → Ultra MacBook Pro), live options, persistence."),
+    ("game3d/js/sim/match.js", "Match simulation adapted for 3D: clubs/kits, conditions, camera interface, effect events."),
+    ("game3d/js/sim/core.js", "Shared simulation module: vectors, RNG, noise, pitch constants."),
+    ("game3d/js/sim/surface.js", "Shared simulation module: the living pitch."),
+    ("game3d/js/sim/ball.js", "Shared simulation module: ball physics + physics-solved aiming."),
+    ("game3d/js/sim/player.js", "Shared simulation module: locomotion, fatigue, leg IK."),
+    ("game3d/js/sim/ai.js", "Shared simulation module: team AI and adaptive manager."),
+    ("game3d/js/sim/audio.js", "Shared simulation module: procedural stadium audio and speech."),
+    ("tools/game3d_sim_tests.js", "Headless Node tests: key layout, all club/kit/condition combinations, full matches."),
+    ("tools/game3d_browser_tests.js", "Playwright browser tests + screenshot capture for the 3D game."),
     ("engine/include/kxi/math.hpp", "Vector math, critically-damped springs, deterministic RNG and value noise."),
     ("engine/include/kxi/surface.hpp", "The Living Pitch interface: weather, cells, contact coefficients."),
     ("engine/src/surface.cpp", "Hydrology (rain, drainage, evaporation), footfall wear and compaction, friction/bounce formulas."),
@@ -443,9 +470,9 @@ def draw_cover(c, doc):
     c.line(MARGIN_X + 8, PAGE_H - 292, MARGIN_X + 140, PAGE_H - 292)
     items = [
         "Part A   The Master Prompt & Design Blueprint",
-        "Part B   Playable prototype — screenshot tour",
-        "Part C   Complete source code (C++, Objective-C++, Swift, Metal, JavaScript, HTML/CSS, Python)",
-        "Part D   Verified results — engine tests, physics lab, browser tests",
+        "Part B   KINETIC XI 3D — the playable 3D browser game (Three.js, PBR, shadows, bloom)",
+        "Part C   Complete source code (3D game, C++ engine, Objective-C++, Swift, Metal, 2D prototype, tools)",
+        "Part D   Verified results — engine tests, physics lab, 3D game tests, browser tests",
         "Part E   What I used · how to run it on your MacBook · study guide",
     ]
     c.setFont(F["Body"], 11)
@@ -563,25 +590,37 @@ def main():
         "Every system has a matching implementation in Part C and evidence in Part D."])
     story += md_to_flowables(design_md)
 
-    # Part B — screenshots
-    story += part_page("B", "Playable Prototype — Screenshot Tour", [
-        "Captured automatically from <b>prototype/index.html</b> by <b>tools/prototype_tests.js</b> (headless Chromium "
-        "driven with real key presses). Open the same file on your MacBook to play it."])
-    captions = json.loads((SHOTS / "captions.json").read_text(encoding="utf-8")) if (SHOTS / "captions.json").exists() else {}
-    for img in sorted(SHOTS.glob("*.jpg")):
-        cap = captions.get(img.stem, img.stem.replace("_", " "))
-        from PIL import Image as PILImage
-        with PILImage.open(img) as im:
-            w, h = im.size
-        dw = CONTENT_W
-        dh = dw * h / w
-        story.append(KeepTogether([Image(str(img), width=dw, height=dh), Paragraph(md_inline(cap), ST["Caption"])]))
+    # Part B — the 3D game: design chapter + screenshots, then the earlier 2D prototype
+    from PIL import Image as PILImage
+
+    def gallery(folder):
+        captions = json.loads((folder / "captions.json").read_text(encoding="utf-8")) if (folder / "captions.json").exists() else {}
+        out = []
+        for img in sorted(folder.glob("*.jpg")):
+            cap = captions.get(img.stem, img.stem.replace("_", " "))
+            with PILImage.open(img) as im:
+                w, h = im.size
+            out.append(KeepTogether([Image(str(img), width=CONTENT_W, height=CONTENT_W * h / w), Paragraph(md_inline(cap), ST["Caption"])]))
+        return out
+
+    story += part_page("B", "KINETIC XI 3D — The Playable 3D Game", [
+        "A complete 3D football game in the browser: Three.js r160 (WebGL 2), PBR materials, real-time shadows, "
+        "bloom, FXAA/MSAA, a procedural multi-tier stadium, articulated players and a live settings menu.",
+        "Play it: double-click <b>game3d/index.html</b>. Screenshots were captured by <b>tools/game3d_browser_tests.js</b> "
+        "with real key presses (software-rendered in the test machine, so the FPS counter there reads about 10)."])
+    story += md_to_flowables((PARTS / "05_game3d.md").read_text(encoding="utf-8"))
+    story.append(PageBreak())
+    story.append(Paragraph("B.12 Screenshot tour — 3D game", ST["H2"]))
+    story += gallery(SHOTS3D)
+    story.append(PageBreak())
+    story.append(Paragraph("B.13 Earlier 2D prototype (kept for reference)", ST["H2"]))
+    story += gallery(SHOTS)
 
     # Part C — complete source
     story += part_page("C", "Complete Source Code", [
-        "Every source file in the project, in build order: the C++17 engine core and its tests, the macOS layer "
-        "(Objective-C++, Swift, Metal), the playable prototype (HTML, CSS, JavaScript), the tools (JavaScript, Python) "
-        "and the engine-generated configuration (JSON).",
+        "Every source file in the project: first the 3D game (HTML, CSS, JavaScript with GLSL shaders), then the C++17 "
+        "engine core and its tests, the macOS layer (Objective-C++, Swift, Metal), the earlier 2D prototype, the tools "
+        "(JavaScript, Python) and the engine-generated configuration (JSON).",
         "Syntax highlighted with line numbers; long lines continue on a row marked ↳."])
     lang_lines = {}
     lang_files = {}
@@ -593,14 +632,24 @@ def main():
 
     # Part D — verified results
     story += part_page("D", "Verified Results", [
-        "Raw output from the engine test runner, the physics lab and the automated browser tests, produced on the "
-        "build machine while making this document."])
+        "Raw output from the engine test runner, the physics lab, the 3D game's headless and browser tests and the "
+        "2D prototype's browser tests, produced on the build machine while making this document."])
+    g3d_txt = (DOCS / "game3d_test_results.txt").read_text(encoding="utf-8")
+    g3d = json.loads((DOCS / "game3d_browser_results.json").read_text(encoding="utf-8"))
     tests_txt = (DOCS / "test_results.txt").read_text(encoding="utf-8")
     lab_txt = (DOCS / "lab_results.txt").read_text(encoding="utf-8")
     proto = json.loads((DOCS / "prototype_test_results.json").read_text(encoding="utf-8"))
     summary = tests_txt.strip().splitlines()[-1]
     story.append(Paragraph("D.1 Summary", ST["H2"]))
+    pr = g3d["presets"]
     rows = [["Check", "Result"],
+            ["3D game: headless simulation + layout tests", g3d_txt.strip().splitlines()[-1]],
+            ["3D game: boot, menu, PLAY MATCH, HUD", f"state {g3d['play']['state']}, HUD shown {g3d['play']['hud']}, page errors {len(g3d['pageErrors'])}"],
+            ["3D game: live key tester (W + D + ↑ held)", ", ".join(g3d["keyTester"])],
+            ["3D game: shot power bar and strike", f"{g3d['powerBar']['charging']} charging · {g3d['shot']['type']} {g3d['shot']['speed']} m/s, {g3d['shot']['spin']} rad/s spin"],
+            ["3D game: goal, net ripple, celebration", f"state {g3d['goal']['state']}, score {g3d['goal']['score']}"],
+            ["3D game: Esc pause / resume", f"paused {g3d['pause']['paused']} → resumed {not g3d['resume']['paused']}"],
+            ["3D game: live presets (scale · shadows · crowd · AA)", " | ".join(f"{k}: {v['renderScale']}x · {v['shadowMap'] if v['shadows'] else 'off'} · {v['crowd']} · {v['aa']}" for k, v in pr.items())],
             ["C++ engine unit + physics tests", summary],
             ["Compiler warnings (-Wall -Wextra -Wpedantic -Wshadow -Wconversion)", "0"],
             ["Prototype kick-off pass", f"state {proto['kickoffPass']['state']}, ball {proto['kickoffPass']['ballSpeed']} m/s"],
@@ -619,7 +668,11 @@ def main():
     story.append(code_block(tests_txt))
     story.append(Paragraph("D.3 Physics & systems lab (kxi_lab)", ST["H2"]))
     story.append(code_block(lab_txt))
-    story.append(Paragraph("D.4 Browser test results (tools/prototype_tests.js)", ST["H2"]))
+    story.append(Paragraph("D.4 3D game — headless simulation tests (tools/game3d_sim_tests.js)", ST["H2"]))
+    story.append(code_block(g3d_txt))
+    story.append(Paragraph("D.5 3D game — browser test results (tools/game3d_browser_tests.js)", ST["H2"]))
+    story.append(code_block(json.dumps(g3d, indent=2)))
+    story.append(Paragraph("D.6 2D prototype — browser test results (tools/prototype_tests.js)", ST["H2"]))
     story.append(code_block(json.dumps(proto, indent=2)))
 
     # Part E — what I used
@@ -629,8 +682,8 @@ def main():
     table = ["| Language | Where it is used | Files | Lines |", "|---|---|---|---|"]
     where = {"C++17": "engine core, tests, physics lab", "Objective-C++": "macOS keyboard capture",
              "Swift": "Apple Silicon power/thermal governor", "Metal Shading Language": "GPU grass shader",
-             "JavaScript": "playable prototype + browser tests", "HTML5": "prototype page",
-             "CSS3": "settings menu styling", "Python 3": "this PDF builder", "CMake": "engine build system",
+             "JavaScript": "3D game (with GLSL shaders inside), 2D prototype, tests", "HTML5": "3D game + prototype pages",
+             "CSS3": "glassmorphism menus and HUD", "Python 3": "this PDF builder", "CMake": "engine build system",
              "JSON": "settings & key bindings (generated by the engine)"}
     for lang in sorted(lang_lines, key=lambda k: -lang_lines[k]):
         table.append(f"| {lang} | {where.get(lang, '')} | {len(lang_files[lang])} | {lang_lines[lang]:,} |")

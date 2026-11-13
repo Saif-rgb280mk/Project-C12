@@ -5,7 +5,8 @@
 **Why this mix?**
 
 - **C++17** is the industry language for game engines. It is fast and deterministic, it compiles natively for Apple Silicon (arm64), and it is what Unreal and most in-house AAA engines use.
-- **JavaScript** gives you something you can play *today* in Safari or Chrome with zero installation.
+- **JavaScript + Three.js (WebGL 2)** powers the playable 3D game: something you can play *today* in Safari or Chrome with zero installation.
+- **GLSL** (the OpenGL Shading Language, written inside the JavaScript files) drives the custom GPU effects: volumetric light shafts and the animated crowd.
 - **Objective-C++ and Swift** are how a native Mac game talks to macOS: keyboard capture, power and thermal state.
 - **Metal Shading Language** is how a Mac game programs the GPU.
 - **Python** builds this PDF.
@@ -17,7 +18,10 @@
 | GCC (g++) / Clang | 13.3 | compiled the C++17 engine with -Wall -Wextra -Wpedantic -Wshadow -Wconversion (zero warnings) |
 | CMake | 3.x | cross-platform build of the engine library, tests and lab tool |
 | C++ Standard Library | C++17 | vectors, arrays, optional, string_view, functional — no third-party C++ libraries at all |
-| Node.js | 22 | ran the automated browser tests |
+| Three.js | r160 (0.160.0, from cdn.jsdelivr.net) | 3D engine for the game: WebGLRenderer, PBR materials (MeshStandard/MeshPhysical), shadow maps, InstancedMesh, PMREM environment maps |
+| Three.js add-ons | r160 | EffectComposer, RenderPass, UnrealBloomPass, OutputPass, ShaderPass + FXAAShader, Sky (physical sky) |
+| WebGL 2 + GLSL | browser | custom shaders: light-shaft cones, crowd animation injected with onBeforeCompile |
+| Node.js | 22 | ran the headless 3D simulation tests and the automated browser tests |
 | Playwright + Chromium | preinstalled | headless browser: drove the prototype with real key presses and captured the screenshots |
 | Web platform APIs | modern browsers | Canvas 2D (rendering), Web Audio (procedural crowd and SFX), Web Speech (commentary/PA), KeyboardEvent (input with timestamps), localStorage (settings) |
 | Apple frameworks (macOS code) | macOS 11+ / 14+ | AppKit (NSEvent), GameController (GCKeyboard), QuartzCore, Foundation, IOKit (power source), Metal (GPU family, shaders) |
@@ -33,13 +37,16 @@
 
 | Status | Items |
 |---|---|
-| **Implemented and tested in this environment** | C++ engine core: ball aerodynamics and contact, living pitch, locomotion, two-bone IK, fatigue/injury, MacBook input arbiter, JSON, settings + Apple presets + dynamic resolution, tactics (pitch control, threat, runs, defensive line, adaptive manager), camera rigs. **45 tests / 271 checks pass.** The playable prototype passes automated browser tests (dribbling, shooting, menus, weather, cameras, goals, half-time, full-match soak: 0 errors, 0 NaN). |
+| **Implemented and tested: the 3D game** | `game3d/`: Three.js renderer with PBR, shadows, bloom/FXAA/MSAA; procedural stadium, crowd, pitch, cloth nets, articulated players, ball, rain, cameras, menus, HUD; the updated MacBook layout. **178 headless checks pass** (all 28 layout rules, 144 club/kit/condition combinations, 3 full matches) and the browser test passes (boot, menus, play, shot, goal, pause, live presets, 0 page errors). |
+| **Implemented and tested: engine and 2D prototype** | C++ engine core: ball aerodynamics and contact, living pitch, locomotion, two-bone IK, fatigue/injury, MacBook input arbiter, JSON, settings + Apple presets + dynamic resolution, tactics (pitch control, threat, runs, defensive line, adaptive manager), camera rigs. **45 tests / 271 checks pass.** The playable prototype passes automated browser tests (dribbling, shooting, menus, weather, cameras, goals, half-time, full-match soak: 0 errors, 0 NaN). |
 | **Written, needs a Mac to compile** | `KXIKeyboardInput.mm` (Objective-C++), `AppleSiliconGovernor.swift`, `GrassBlades.metal`. They use the same tested engine APIs, but the Linux build machine has no macOS SDK, so they were not compiled here. |
 | **Designed (specification only)** | Full Metal renderer with MetalFX and ray tracing, motion-captured animation with motion matching and active ragdoll, learned neural policy, rollback netcode, PHASE spatial audio, replay director, Rollover Lab screen, career mode, cards/advantage/VAR. |
 
 ## E.4 How to run everything on your MacBook
 
-**1. Play the prototype (no installation):** open the `prototype` folder and double-click `index.html` (Safari or Chrome). Click the page once, then press any key to kick off. Press Esc for every setting.
+**1. Play the 3D game (no installation):** open the `game3d` folder and double-click `index.html` (Chrome or Safari, with internet the first time). The live stadium appears behind the menu: pick clubs, kits and conditions, then press PLAY MATCH and press S to kick off. Esc opens every setting. If the browser refuses a page opened from Finder, run `python3 -m http.server 8000` inside `game3d` and open http://localhost:8000.
+
+**1b. The earlier 2D prototype** is still in `prototype/index.html`.
 
 **2. Fix Control + Arrow keys first.** macOS uses Control + arrows for Mission Control, which steals the Sprint chord. Open System Settings → Keyboard → Keyboard Shortcuts… → Mission Control and untick "Mission Control", "Application windows", "Move left a space" and "Move right a space". Alternatively, rebind Sprint to Left Option in Esc → Controls.
 
@@ -85,6 +92,10 @@ Learn the project in this order. Each step names the file, the one idea to under
 | 8 | `prototype/js/ai.js` | utility scores + softmax choose actions | raise the shot bonus and watch the CPU shoot more |
 | 9 | `engine/src/tactics.cpp` | pitch control: who arrives first wins | move a defender in the test and print the probability |
 | 10 | `engine/tests/tests.cpp` | tests prove the claims | break a constant on purpose and watch a test fail |
+| 11 | `game3d/js/gfx/engine.js` | a render pipeline: scene → HDR target → bloom → tone mapping → FXAA | switch bloom off in GAME SETTINGS and compare the floodlights |
+| 12 | `game3d/js/gfx/humanoid.js` | a skeleton is a tree of joints; rotating a parent moves its children | change the sprint arm swing (0.85) and watch the run |
+| 13 | `game3d/js/gfx/goals.js` | Verlet cloth: points remember their last position, constraints keep them together | raise the ripple impulse (0.09) and score a goal |
+| 14 | `game3d/js/sim/input.js` | one key, many meanings, chosen by game context | trace W + D from press to `FinesseShot` |
 
 **Self-check: you are ready when you can answer these without notes.**
 
@@ -98,3 +109,5 @@ Learn the project in this order. Each step names the file, the one idea to under
 8. What is D' and why does a sprinter slow down after repeated sprints?
 9. How does the CPU manager decide to double up on a flank, and why does it use hysteresis?
 10. What is a fixed timestep, and why does determinism matter for replays and online play?
+11. What do PBR materials, shadow maps and bloom each add to the 3D image?
+12. How does the game turn the simulation's coordinates (z up) into Three.js coordinates (y up)?
