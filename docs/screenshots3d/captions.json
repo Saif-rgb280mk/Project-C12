@@ -1,0 +1,15 @@
+{
+ "01_main_menu_night": "**Main menu over the live 3D stadium (Floodlit Night).** Glassmorphism KICK OFF tab with club and kit pickers, conditions, half length, difficulty and PLAY MATCH. Behind it: roof trusses, blooming floodlight banks, volumetric light shafts, the LED ribbon and the animated 3D crowd. FPS counter top right.",
+ "02_game_settings": "**GAME SETTINGS.** Quality preset (Low · Medium · High · Ultra (MacBook Pro)), FPS target (30/60/120/Uncapped), render scale 50–150%, shadow map quality (Off/1024/2048/4096 px), anti-aliasing (Off/FXAA/MSAA 4x), floodlight bloom & volumetric lighting, 3D crowd density, turf detail, plus gameplay, camera and audio. All apply live.",
+ "03_controls": "**CONTROLS.** The exact MacBook layout plus a live key tester (W, D and ↑ held here) and the Mission Control tip.",
+ "04_sunset": "**Sunset.** Low warm sun from the physical sky, long shadows, floodlights switched on at reduced power, warm fog.",
+ "05_clear_day": "**Clear Day.** Preetham physical sky, shadow-casting sun, daylight PMREM reflections; bloom is reduced so the stands stay crisp.",
+ "06_rain": "**Rain.** Wind-blown rain streaks and splashes, wet glossy turf (lower roughness, darker albedo), thicker fog and light shafts through the downpour.",
+ "07_broadcast_kickoff": "**Kick-off from the Broadcast gantry.** Minimalist top-left scorebug, toast prompt, translucent bottom-centre radar, mowing stripes, 3D lines, real-time floodlight shadows.",
+ "08_broadcast_play": "**Open play.** The camera leads the ball with its velocity and tightens near the box (dynamic zoom).",
+ "09_power_bar": "**Shot power.** Holding D fills the power arc on the ring at the player's feet; the readout bottom-left shows the charging action.",
+ "10_shot": "**The strike.** Launch solved through the real ball physics (speed, topspin), then human error applied to the launch.",
+ "11_goal_celebration": "**Goal!** The cloth net bulges and ripples, the scorer celebrates with arms raised, the crowd jumps, and the camera cuts to a low celebration shot.",
+ "12_pause_menu": "**Esc pause menu.** RESUME, RESTART MATCH, QUIT TO MAIN MENU; the GAME SETTINGS and CONTROLS tabs stay available mid-match.",
+ "13_players_closeup": "**Articulated players up close.** Sculpted capsule anatomy (V-shaped torso, tapered limbs), hair, ears, eyes, kits with shirt numbers, boots, the paneled ball, the at-feet ring, and LED sponsor boards behind."
+}
