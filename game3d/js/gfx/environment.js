@@ -39,9 +39,13 @@
       fragmentShader: `
         uniform vec3 uColor; uniform float uIntensity; varying float vT; varying vec3 vN; varying vec3 vView; varying float vNear;
         void main() {
-          float edge = pow(abs(dot(normalize(vN), normalize(vView))), 1.7);
-          float fade = smoothstep(0.0, 0.06, vT) * pow(1.0 - vT, 1.3);
-          gl_FragColor = vec4(uColor * uIntensity * edge * fade * vNear, 1.0);
+          // Every pow() base is kept strictly positive: pow(x<=0, y) is undefined in GLSL and
+          // Apple GPUs return NaN, which the bloom blur then smears into large black boxes.
+          float t = clamp(vT, 0.0, 1.0);
+          float edge = pow(clamp(abs(dot(normalize(vN + 1e-5), normalize(vView + 1e-5))), 1e-4, 1.0), 1.7);
+          float fade = smoothstep(0.0, 0.06, t) * pow(max(1.0 - t, 1e-4), 1.3);
+          vec3 col = uColor * uIntensity * edge * fade * clamp(vNear, 0.0, 1.0);
+          gl_FragColor = vec4(clamp(col, 0.0, 4.0), 1.0);
         }`,
       transparent: true, depthWrite: false, blending: T.AdditiveBlending, side: T.DoubleSide, fog: false,
     });

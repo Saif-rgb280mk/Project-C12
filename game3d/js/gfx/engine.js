@@ -44,6 +44,21 @@
       this.bloomPass = new T.UnrealBloomPass(new T.Vector2(256, 256), 0.55, 0.45, 0.92);
       this.outputPass = new T.OutputPass();
       this.fxaaPass = new T.ShaderPass(T.FXAAShader);
+      // NaN/Inf guard. A single invalid HDR pixel (a 0^y in a shader, or a specular highlight
+      // overflowing half-float range on Apple GPUs) is blurred by every bloom mip level into
+      // big black rectangles. Sanitising the bloom input and the tone-mapping input stops it.
+      const guard = (mat, maxV) => {
+        const src = mat.fragmentShader;
+        // GLSL ES 1.0 has no isnan(): NaN is the only value for which both comparisons are
+        // false; min/max then clamp +Inf (and, on Metal, also discard NaN on their own).
+        const M = maxV.toFixed(1);
+        const fn = 'float kxiOk(float x) { return (x >= 0.0 || x <= 0.0) ? min(max(x, 0.0), ' + M + ') : 0.0; }\n' +
+          'vec4 kxiSafe(vec4 c) { return vec4(kxiOk(c.r), kxiOk(c.g), kxiOk(c.b), min(max(c.a, 0.0), 1.0)); }\n';
+        mat.fragmentShader = src.replace('void main()', fn + 'void main()').replace(/texture2D\(\s*tDiffuse\s*,\s*vUv\s*\)/g, 'kxiSafe(texture2D(tDiffuse, vUv))');
+        mat.needsUpdate = true;
+        return mat.fragmentShader !== src;
+      };
+      this.guarded = guard(this.bloomPass.materialHighPassFilter, 64) && guard(this.outputPass.material, 60000);
       c.addPass(this.renderPass);
       c.addPass(this.bloomPass);
       c.addPass(this.outputPass);
